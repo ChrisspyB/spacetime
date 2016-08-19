@@ -1,0 +1,28 @@
+body {
+    margin:0;
+    font-family: Helvetica, sans-serif;
+    font-weight: 300;
+    font-size: 1.5em;
+    line-height: 1.2em;
+    background: #eee;
+    color: #000;
+}
+
+#heading {
+    padding:75px;
+    text-align: center;
+    background: #000;
+    color: #ffffff;
+}
+
+#content {
+    width:840px;
+    margin:40px auto 100px auto;
+
+}
+.eqn{
+    font-family: "Times New Roman", sans-serif;
+    letter-spacing: 1px;
+    /*font-weight: bold;*/
+    font-style: italic;
+}
