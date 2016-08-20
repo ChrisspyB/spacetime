@@ -26,3 +26,8 @@ body {
     /*font-weight: bold;*/
     font-style: italic;
 }
+
+/*svg*/
+.spacetime{ 
+    background: white;
+}
