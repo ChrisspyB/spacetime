@@ -28,6 +28,30 @@ body {
 }
 
 /*svg*/
+svg{
+    -webkit-user-select: none;  /* Chrome all / Safari all */
+    -moz-user-select: none;     /* Firefox all */
+    -ms-user-select: none;      /* IE 10+ */
+}
 .spacetime{ 
     background: white;
+}
+.event_marker{
+    fill:red;
+    stroke:black;
+}
+.hovertext{
+    position: absolute;
+    padding: 0 10px;
+    background: none;
+    -webkit-user-select: none;  /* Chrome all / Safari all */
+    -moz-user-select: none;     /* Firefox all */
+    -ms-user-select: none;      /* IE 10+ */
+}
+.event_marker_selected{
+    fill: lightgreen;
+}
+.event_marker:hover{
+ 
+    stroke:white;
 }
