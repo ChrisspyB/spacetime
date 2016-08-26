@@ -23,7 +23,6 @@ body {
 .eqn{
     font-family: "Times New Roman", sans-serif;
     letter-spacing: 1px;
-    /*font-weight: bold;*/
     font-style: italic;
 }
 
@@ -37,7 +36,6 @@ svg{
     background: white;
 }
 .event_marker{
-    fill:red;
     stroke:black;
 }
 .hovertext{
@@ -48,10 +46,6 @@ svg{
     -moz-user-select: none;     /* Firefox all */
     -ms-user-select: none;      /* IE 10+ */
 }
-.event_marker_selected{
-    fill: lightgreen;
-}
 .event_marker:hover{
- 
     stroke:white;
 }

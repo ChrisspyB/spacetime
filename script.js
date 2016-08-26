@@ -95,8 +95,10 @@ var SpacetimeDiagram = function(div,xmax,ymax,w,h) {
     this.div = div;
     this.pointevents = []; // list of point events to be plotted (as circles)
     this.eventselected = false; // is an event currently selected?
+    this.t = 0; // current time (simulation run-time)
     this.selectedIndex = 0;
     this.event_marker_r = 10; // radius of circle representing point events
+    this.selection_axes_l = 5; // length (before scaling) of axes drawn on selection
     this._event_data = [];
     // conventional d3 margin setup
     this.margin = {top: 20, right: 20, bottom: 50, left: 70},
@@ -153,10 +155,11 @@ var SpacetimeDiagram = function(div,xmax,ymax,w,h) {
     this.active_line = this.active.append("line")
         .attr("x1",this.xscale(0))
         .attr("y1",this.yscale(0))
+        .attr("display","none")
         .style("stroke","black");
 
-    this.hovertext = d3.select(div).append("div") 
-        .classed("hovertext",true)
+    this.hovertext = this.svg.append("text"); 
+        // .classed("hovertext",true);
 
     this.svg.append("line") // light-like line seperating space-like and time-like
         .attr("x1",this.xscale(0))
@@ -166,43 +169,85 @@ var SpacetimeDiagram = function(div,xmax,ymax,w,h) {
         .style("stroke","black")
         .style("stroke-dasharray","3,3");
 
-    this.eventsgroup = this.svg.append("g");
+    this.eventsgroup = this.svg.append("g"); // svg element that will hold all events
 
+    this.t_slider = d3.select(this.div).append("input")
+        .attr("type","range")
+        .attr("min",-50)
+        .attr("max",50)
+        .attr("value",0)
+        .on("change",function() {
+            that.changeTime(parseFloat(d3.select(this).property("value")));
+        });
+    this.t_slider_txt = d3.select(this.div).append("span")
+        .html(" t: "+this.t_slider.property("value"));
+
+    // lines displayed when an event is selected
+    this.selection_axes = this.svg.append("g").attr("display","none")
+    this.selection_axes.append("line") // x-line
+        .attr("x1",this.xscale(0))
+        .attr("y1",this.yscale(0))
+        .attr("x2",this.xscale(this.selection_axes_l))
+        .attr("y2",this.yscale(0))
+        .style("stroke","black");
+    this.selection_axes.append("line") //y-line
+        .attr("x1",this.xscale(0))
+        .attr("y1",this.yscale(0))
+        .attr("x2",this.xscale(0))
+        .attr("y2",this.yscale(this.selection_axes_l))
+        .style("stroke","black");
 };
 SpacetimeDiagram.prototype.updateEvents = function(arr,cleardata) {
-    // format of arr: array [[x1,y1],[x2,y2],...]
-    // where x1,y1 are the coordinates of event 1
+    // format of arr: array [[x,y,v,fix_t],[x,y,v,fix_t],...]
+    // where x,y,v are the coordinates and velocities of the event
+    // fix_t true if the event does not travel through time
+    // note: if v!=0, physics requires fix_t = false
     // cleardata: should previous events be removed?
     if(cleardata !== true) cleardata = false;
     if(cleardata) this._event_data = [];
 
     var that = this;
+    var backup = this._event_data.slice(); // in case invalue args have been use
     for(var i=0; i<arr.length; i++){
-        this._event_data.push({x:arr[i][0],y:arr[i][1]});
+        if(arr[i][2]>1){ 
+            // * might this be triggered by floating point rounding errors?
+            console.log("WARNING: Faster than light particle created. Speed: "
+                +arr[i][2] + " Time-stationary: "+arr[i][3]);
+        }
+        this._event_data.push({
+            ox:arr[i][0],oy:arr[i][1], // position when initialised
+            x:arr[i][0],y:arr[i][1], // current position
+            vx:arr[i][2], // x-velocity
+            fix_t:arr[i][3] // is this event time-stationary?
+        });
     }
-    
+
     // Following D3 general update pattern
     // Data Join
-    var myevents = this.eventsgroup.selectAll("circle").data(this._event_data);
-    
+    var events = this.eventsgroup.selectAll("circle").data(this._event_data);
+
     // Update any existing data
-    myevents
+    events
         .attr("cx",function(d,i){return that.xscale(d.x);})
-        .attr("cy",function(d,i){return that.yscale(d.y);});
+        .attr("cy",function(d,i){return that.yscale(d.y);})
+        .style("fill",function(d) {return d.fix_t ? "red" : "steelblue";});
 
     // Add new data
-    myevents.enter().append("circle")
+    events.enter().append("circle")
         .classed("event_marker",true)
         .attr("cx",function(d,i){return that.xscale(d.x);})
         .attr("cy",function(d,i){return that.yscale(d.y);})
         .attr("r",this.event_marker_r)
         .on("click",function(d,i) {
             that.updateSelection(this,i);
-        });
+        })
+        .style("fill",function(d) {return d.fix_t ? "red" : "steelblue";});
     // Remove any no longer present data
-    myevents.exit().remove();
+    events.exit().remove();
 };
-SpacetimeDiagram.prototype.updateSelection = function(point,i) {
+SpacetimeDiagram.prototype.updateSelection = function(e_marker,i) {
+    //e_marker: 
+    //i: index of new selection
     if(this.eventselected){ // deselect previous
         d3.select(".event_marker_selected")
             .classed("event_marker_selected",false);
@@ -210,24 +255,78 @@ SpacetimeDiagram.prototype.updateSelection = function(point,i) {
         if (this.selectedIndex === i) {
             this.eventselected = false;
             this.hovertext.style("opacity",0);
-             return;
+            this.active_line.attr("display","none");
+            this.selection_axes.attr("display","none");
+            this.setReferenceEvent_Classical(i);
+            return;
         }
     }
     this.selectedIndex = i;
     this.eventselected = true;
-    d3.select(point).classed("event_marker_selected",true);
-
-    var px = d3.select(point).attr("cx")
-    var py = d3.select(point).attr("cy")
-    this.active_line
-        .attr("x2",px)
-        .attr("y2",py);
-    this.hovertext.style("opacity",1)
-        .style('left',(d3.event.pageX)+'px')
-        .style('top',(d3.event.pageY)+'px')
-        .html(["(",this._event_data[i].x,",",this._event_data[i].y,")"].join(""));
+    d3.select(e_marker).classed("event_marker_selected",true);
+    this.moveSelectionLines();
 };
+SpacetimeDiagram.prototype.moveSelectionLines = function() {
+    // update lines which are following the selected event
+    // called by both updateSelection and changeTime
+    var  i = this.selectedIndex;
+    this.active_line
+        .attr("x2",this.xscale(this._event_data[i].x))
+        .attr("y2",this.yscale(this._event_data[i].y))
+        .attr("display","inline");
 
+    this.hovertext.style("opacity",1)
+        .attr("x",this.xscale(this._event_data[i].x)+10)
+        .attr("y",this.yscale(this._event_data[i].y)+30)
+        .html(["(",this._event_data[i].x,",",this._event_data[i].y,")"].join(""));
+
+    this.selection_axes.attr("display","inline")
+        .attr("transform",  
+        "translate("+(this.xscale(this._event_data[i].x)-this.xscale(0))+
+            ","+(this.yscale(this._event_data[i].y)-this.yscale(0))+")");
+
+};
+SpacetimeDiagram.prototype.changeTime = function(t) {
+    this.t = t;
+    this.t_slider_txt.html(" t: "+t);
+    this.t_slider.property("value",t);
+    for (var i=0; i<this._event_data.length; i++){
+        this._event_data[i].x = 
+            this._event_data[i].ox + t * this._event_data[i].vx;
+
+        if(this._event_data[i].fix_t) continue;
+        
+        this._event_data[i].y = 
+            this._event_data[i].oy + t
+    }
+    this.updateEvents([],false);
+    if(this.eventselected)this.moveSelectionLines();
+};
+SpacetimeDiagram.prototype.setReferenceEvent_Classical = function(event_index) {
+    // change event from which event are we viewing from.
+    var data = [];
+    var ref = this._event_data[event_index];
+    var t = this.t;
+    this.changeTime(0); 
+    for (var i=0; i<this._event_data.length; i++){
+        if (i===event_index){
+            data.push([0,0,0,ref.fix_t]);
+        }else{
+            data.push([
+                this._event_data[i].x-ref.x,
+                this._event_data[i].y-ref.y,
+                this._event_data[i].vx-ref.vx,
+                this._event_data[i].fix_t,
+            ]);
+        }
+    }
+    this.updateEvents(data,true);
+    this.changeTime(t);
+};
+SpacetimeDiagram.prototype.setReferenceEvent_Relativistic = function(event_index) {
+    // change event from which event are we viewing from.
+    throw("Not yet implemented");
+};
 var temp_LogParticleProperties = function(p) {
     console.log(p);
     console.log("st vector: "+p.st.x+","+p.st.w);
@@ -240,9 +339,15 @@ var temp_LogParticleProperties = function(p) {
 var p = new Particle(new FourVector2D(10,0),0,2);   
 var st = new SpacetimeDiagram("#testgrounds",50,50,width,width);
 p.changeFrame(0,0);
-temp_LogParticleProperties(p);
+// temp_LogParticleProperties(p);
 
-st.updateEvents([[10,10],[20,30],[5,26]]);
-st.updateEvents([[11,10],[12,12],[14,14]]);
+st.updateEvents([[0,0,0,true],[20,30,0,true],[50,26,0,true],[20,0,0.6,false],[10,0,-0.5,false],[30,0,0.3,false]],false);
 
+// var temp_PAUSER = 0;
+// setInterval(function() {
+//     if(temp_PAUSER>3) return;
+//     temp_PAUSER++;
+//     console.log(temp_PAUSER);
+//     st.changeTime(st.t+1);
+// },100);
 })();
