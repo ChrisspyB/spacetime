@@ -3,96 +3,6 @@
 
 var width = 840; // width of containing div
 
-var velAddition = function(u,v) {
-    //in natural units
-    //returns velocity in frame S'
-    //u:velocity in frame S, v: relative velocity of frames S and S'
-    return (u-v)/(1-u*v) 
-};
-
-
-var FourVector2D = function(w,x) {
-    // Object representing four vectors in special relativity, with y,z componets assumed zero
-    // eg spacetime: (ct,x,y,z), energy-momentum (E/c,px,py,pz), 4velocity gamma*(c,ux,uy,uz)
-    // Uses (+---) metric signature
-    this.w = w; 
-    this.x = x;
-};
-FourVector2D.prototype.add = function(other) {
-    // Add another FourVector2D
-    this.w+=other.w;
-    this.x+=other.x;
-};
-FourVector2D.prototype.sub = function(other) {
-    // Subtract another FourVector2D
-    this.w-=other.w;
-    this.x-=other.x;
-};
-FourVector2D.prototype.scale = function(scaler) {
-    // Scaler multiplication
-    this.w*=scaler;
-    this.x*=scaler;
-};
-FourVector2D.prototype.inner = function(other) {
-    // Inner product of two four vectors
-    return this.w*other.w-this.x*other.x;
-};
-FourVector2D.prototype.norm = function() {
-    // inner product with itself
-    return this.inner(this);
-};
-FourVector2D.prototype.copy = function() {
-    // Make an identical copy of this vector
-    return new FourVector2D(this.w,this.x);
-};
-
-var Particle = function(spacetime,velocity,restmass) {
-    // Particle restricted to motion in +- x-direction only
-    // Everything in natural units (c=1)
-
-    // Frame dependent
-    this.st = spacetime; // FourVector2D: .w = ct part, .x = x part
-    this.u = velocity; // signed scaler velocity (x-direction)
-    this.g; // gamma factor
-    this.p; // relativistic momentum
-    this.mass_rel; // relativistic mass
-    this.E_square; // 
-
-    // Frame independent
-    this.restmass = restmass; // rest mass
-    this.s_square; // length of st vectors
-
-    this._calc(true,true,true,true,true);
-};
-Particle.prototype._calc= function(g,m_rel,p,energy,s) {
-    if(g) this.g = 1/Math.sqrt(1-this.u*this.u);
-    if(m_rel) this.mass_rel = this.g * this.restmass;
-    if(p) this.p = this.mass_rel * this.u;
-    if(energy) this.E_square = this.p*this.p + this.restmass*this.restmass
-    if(s) this.s_square = this.st.norm();
-};
-Particle.prototype.updatePos = function(x) {
-    var w_sq = this.s_square+x*x;
-
-    if (w_sq<0){console.log("negative w_sq!"); w_sq*=-1;}
-    this.st.w = Math.sqrt(w_sq);
-    this.st.x  = x;
-    return true;
-};
-Particle.prototype.updateVel = function(u) {
-    this.u = u;
-    this._calc(true,true,true,true,true);
-};
-Particle.prototype.changeFrame = function(x,u) {
-    // x,u particle position and velocity in new frame
-    if(u>1){
-        throw("Particles cannot travel faster than light speed...");
-        return;
-    }
-    if(this.updatePos(x)){
-        this.updateVel(u);
-    }
-};
 var SpacetimeDiagram = function(div,xmax,ymax,w,h) {
     // SVG diagram displaying ct against x
     // div is the html element id (#string) to which the svg is appended
@@ -507,7 +417,6 @@ SpacetimeDiagram.prototype.changeTime = function(t) {
     this._updateEvents([],false);
     if(this.eventselected)this.moveSelectionLines();
 };
-
 SpacetimeDiagram.prototype.setReferenceEvent = function(event_index,newtonian) {
     // change event from which event are we viewing from.
     // via Lorentz transformations
@@ -545,17 +454,8 @@ SpacetimeDiagram.prototype.setReferenceEvent = function(event_index,newtonian) {
     console.log(data);
     this._updateEvents(data,true);
     this.changeTime(0);
-
 };
-var temp_LogParticleProperties = function(p) {
-    console.log(p);
-    console.log("st vector: "+p.st.x+","+p.st.w);
-    console.log("velocity: "+p.u+"c");
-    console.log("momentum: "+p.p+"eV/c");
-    console.log("relativistic mass "+p.mass_rel+"eV/c/c");
-    console.log("rest mass "+ p.restmass+"eV/c/c");
-    console.log("energy "+Math.sqrt(p.E_square)+"eV");
-};  
+
 var st = new SpacetimeDiagram("#testgrounds",50,50,width,width);
 st.addParticle(0,0,0,Infinity);
 st.addParticle(35,20,0.5,30);
