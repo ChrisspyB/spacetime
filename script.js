@@ -114,10 +114,14 @@ var SpacetimeDiagram = function(div,xmax,ymax,w,h) {
     this.waitframe = false; // for preventing overlapping animation calls.
     this.framelength = 100;
     // conventional d3 margin setup
-    this.margin = {top: 220, right: 220, bottom: 250, left: 270},
+    this.margin = {top: 20, right: 20, bottom: 50, left: 70},
     this.width = w - this.margin.left - this.margin.right,
     this.height = h - this.margin.top - this.margin.bottom;
-
+    //
+    this.particlecount = 0;
+    this.colors = ["red","blue","green"];
+    //
+    this._mode = "normal" // "normal", "addingBirth","addingDeath"
     // add svg object and translate group to top left margin
     this.svg = d3.select(div).append("svg")
         .classed("spacetime",true)
@@ -199,17 +203,40 @@ var SpacetimeDiagram = function(div,xmax,ymax,w,h) {
             that.animating = !that.animating;
             that.animate();
         });
-    d3.select(this.div).append("button").html(" RESET ")
-        .on("click",function() {
-            that.animating = false;
-            that.changeTime(0);
-            that.newtonian?that.setReferenceEvent_Classical(0):that.setReferenceEvent_Relativistic(0);
-        });
     d3.select(this.div).append("button").html(" ZERO ")
         .on("click",function() {
             that.animating = false;
             that.changeTime(0);
         });
+    d3.select(this.div).append("button").html(" ADD PARTICLE ")
+        .on("click",function() {
+            console.log("click to choose particle's birth");
+            that.setMode("addingBirth");
+        })
+
+    d3.select(this.div).append("button").html(" CLEAR ALL ")
+        .on("click",function() {
+            alert("not yet implemented")
+        })
+
+    this.tempcone1 = this.svg.append("line")
+        .style("stroke","black");
+    this.tempcone2 = this.svg.append("line")
+        .style("stroke","black");
+    this.tempBirth = this.svg.append("circle")
+        .classed("temp-marker",true)
+        .style("fill","none")
+        .style("stroke","red")
+        .style("display","none")
+        .attr("r",this.event_marker_r);
+
+    this.tempDeath = this.svg.append("circle")
+        .classed("temp-marker",true)
+        .style("fill","none")
+        .style("stroke","blue")
+        .style("display","none")
+        .attr("r",this.event_marker_r);
+
     // lines displayed when an event is selected
     this.selection_axes = this.svg.append("g").attr("display","none");
     this.selection_axes.append("line") // x-line
@@ -225,20 +252,81 @@ var SpacetimeDiagram = function(div,xmax,ymax,w,h) {
         .attr("y2",this.yscale(this.selection_axes_l))
         .style("stroke","black");
 };
-SpacetimeDiagram.prototype.updateEvents = function(arr,cleardata) {
-    // format of arr: array [[x,y,v,fix_t],[x,y,v,fix_t],...]
-    // where x,y,v are the coordinates and velocities of the event
-    // fix_t true if the event does not travel through time
-    // note: if v!=0, physics requires fix_t = false
+SpacetimeDiagram.prototype.setMode = function(newmode) {
+    var that = this;
+    var click;
+    var move;
+    if(newmode==="normal"){
+        this.tempBirth.style("display","none");
+        this.tempDeath.style("display","none");
+        this.tempcone1.style("display","none");
+        this.tempcone2.style("display","none");
+        click = function() {};
+        move = function() {};
+    }
+    else if (newmode==="addingBirth"){
+        this.tempDeath.style("display","none");
+        this.tempcone1.style("display","inline");
+        this.tempcone2.style("display","inline");
+        this.tempBirth.style("display","inline");
+        click = function() {
+            that.setMode("addingDeath");
+        };
+        move = function() {
+            var x = (d3.event.offsetX-that.margin.left)
+            var y = (d3.event.offsetY-that.margin.top)
+            that.tempBirth
+                .attr("cx",x)
+                .attr("cy",y);
+            that.tempcone1
+                .attr("x1",x+10)
+                .attr("y1",y-10)
+                .attr("x2",x+200)
+                .attr("y2",y-200);
+            that.tempcone2
+                .attr("x1",x-10)
+                .attr("y1",y-10)
+                .attr("x2",x-200)
+                .attr("y2",y-200);
+            };
+
+    }
+    else if (newmode==="addingDeath"){
+        this.tempDeath.style("display","inline");
+        click = function() {
+            that.user_AddParticle_Clicks(
+                that.xscale.invert(that.tempBirth.attr("cx")),
+                that.yscale.invert(that.tempBirth.attr("cy")),
+                that.xscale.invert(that.tempDeath.attr("cx")),
+                that.yscale.invert(that.tempDeath.attr("cy")));
+            that.setMode("normal");
+        };
+        move = function() {
+            var x = (d3.event.offsetX-that.margin.left)
+            var y = (d3.event.offsetY-that.margin.top)
+            that.tempDeath
+                .attr("cx",x)
+                .attr("cy",y);
+        };
+    }
+    else{
+        throw("unrecognised mode!");
+    }
+    d3.select(this.div).select("svg").on("click",click);
+    d3.select(this.div).select("svg").on("mousemove",move);
+    this._mode = newmode;
+};
+SpacetimeDiagram.prototype._updateEvents = function(arr,cleardata) {
+    // ...
     // cleardata: should previous events be removed?
     if(cleardata !== true) cleardata = false;
     if(cleardata) this._data = [];
 
     var that = this;
-    var backup = this._data.slice(); // in case invalue args have been use
+    var backup = this._data.slice(); // in case invalid args have been use
     for(var i=0; i<arr.length; i++){
         if(arr[i][2]>1 && !this.newtonian){ 
-            // * might this be triggered by floating point rounding errors?
+            // * might this be triggered by floating point errors?
             console.log("WARNING: Faster than light particle created. Speed: "
                 +arr[i][2] + " Time-stationary: "+arr[i][3]);
         }
@@ -246,10 +334,11 @@ SpacetimeDiagram.prototype.updateEvents = function(arr,cleardata) {
             xi:arr[i][0], // starting x-position
             yi:arr[i][1], // time to start moving 
             vx:arr[i][2], // x-velocity
-            fix_t:arr[i][3], // is this event time-stationary?
-            lifetime:arr[i][4], // for how long does the particle travel
+            lt:arr[i][3], // for how long does the particle travel
             x:arr[i][0],y:arr[i][1], // current position
-            alive:false
+            alive:true,
+            type:arr[i][4], // particle,birth,death,misc,
+            color:arr[i][5]
         });
     }
 
@@ -261,26 +350,51 @@ SpacetimeDiagram.prototype.updateEvents = function(arr,cleardata) {
     events
         .attr("cx",function(d,i){return that.xscale(d.x);})
         .attr("cy",function(d,i){return that.yscale(d.y);})
-        .style("stroke-width",function(d) {return d.fix_t ? "1" : "2";})
-        .style("fill",function(d) {return d.fix_t ? "red" : d.alive?"steelblue":"grey";});
-
+        .style("stroke-width",2)
+        .style("stroke-dasharray",function(d){
+            if (d.type==="birth" || d.type==="death") return "2,2";
+            return;
+        })
+        .style("stroke",function(d) {
+            if (d.type==="birth" || d.type==="death") return d.color;
+            if (d.type==="particle") return "none";
+            return "black";
+        })
+        .style("fill",function(d) {
+            if (d.type==="particle") {
+                return d.color;
+            }
+            if (d.type==="birth" || d.type==="death"){
+                return "white";
+            }
+            return "purple";
+        })
+        .style("fill-opacity",function(d) {
+             if (d.type==="particle") {
+                return d.alive ? 1 : 0;
+            }
+            if (d.type==="birth" || d.type==="death"){
+                return 0;
+            }
+        })
     // Add new data
     events.enter().append("circle")
         .classed("event_marker",true)
-        .attr("cx",function(d,i){return that.xscale(d.x);})
-        .attr("cy",function(d,i){return that.yscale(d.y);})
         .attr("r",this.event_marker_r)
         .on("click",function(d,i) {
             that.updateSelection(this,i);
         })
-        .style("stroke-width",function(d) {return d.fix_t ? "1" : "2";})
-        .style("fill",function(d) {return d.fix_t ? "red" : d.alive?"steelblue":"grey";});
+        .attr("cx",function(d,i){return that.xscale(d.x);})
+        .attr("cy",function(d,i){return that.yscale(d.y);})
+
     // Remove any no longer present data
     events.exit().remove();
+    // console.log(this._data);
 };
 SpacetimeDiagram.prototype.updateSelection = function(e_marker,i) {
     //e_marker: 
     //i: index of new selection
+    if(this._mode!=="normal") return;
     if(this.eventselected){ // deselect previous
         d3.select(".event_marker_selected")
             .classed("event_marker_selected",false);
@@ -290,7 +404,7 @@ SpacetimeDiagram.prototype.updateSelection = function(e_marker,i) {
             this.hovertext.style("opacity",0);
             this.active_line.attr("display","none");
             this.selection_axes.attr("display","none");
-            this.newtonian?this.setReferenceEvent_Classical(i):this.setReferenceEvent_Relativistic(i);
+            this.setReferenceEvent(i,this.newtonian);
             return;
         }
     }
@@ -299,7 +413,35 @@ SpacetimeDiagram.prototype.updateSelection = function(e_marker,i) {
     d3.select(e_marker).classed("event_marker_selected",true);
     this.moveSelectionLines();
 };
-
+SpacetimeDiagram.prototype.user_AddParticle_Clicks = function(xb,tb,xd,td) {
+    this.addParticle(xb,tb,(xd-xb)/(td-tb),td-tb);
+};
+SpacetimeDiagram.prototype.addParticle = function(xb,tb,u,lt) {
+    // add a particle that will be born at xb,tb.
+    // and travel through x with velocity u with a lifetime lt.
+    // birth and death events will also be added to the event list.
+    // if lt is set to Infinity, no death event will be added.
+    if (typeof lt === "undefined") lt = Infinity;
+    if (u>1 || u<-1) {console.log("faster than light particle!"); return;}
+    if (lt<0) {console.log("particle with negative lifetime!"); return;}
+    this.particlecount++;
+    var c = this.particlecount;
+    while(c>=this.colors.length)c-=this.colors.length;
+    
+    var new_events = [];
+    new_events.push([ // Particle
+        xb,tb,u,lt,"particle",this.colors[c]
+    ]);
+    new_events.push([ // Particle birth
+        xb,tb,0,0,"birth",this.colors[c]
+    ]);
+    if(lt!==Infinity){
+        new_events.push([ // Particle death
+            xb+u*lt,tb+lt,0,0,"death",this.colors[c]
+        ]);
+    }
+    this._updateEvents(new_events,false);
+};
 SpacetimeDiagram.prototype.animate = function() {
     var that = this;
     if(!this.waitframe){
@@ -345,18 +487,16 @@ SpacetimeDiagram.prototype.changeTime = function(t) {
     this.t_slider.property("value",t);
 
     for (var i=0; i<this._data.length; i++){
-        if(this._data[i].fix_t) continue;
+        if(this._data[i].type!=="particle") continue;
 
         this._data[i].y = t;
 
         if(t < this._data[i].yi) {
             // particle remains at rest until born
-            // this._data[i].x = this._data[i].xi;
             this._data[i].alive = false;
         }
-        else if (t>this._data[i].yi+this._data[i].lifetime){
+        else if (t>this._data[i].yi+this._data[i].lt){
             // particle remains at position of death
-            // this._data[i].x = this._data[i].xi+this._data[i].vx*this._data[i].lifetime;
             this._data[i].alive = false;
         }
         else{
@@ -364,62 +504,46 @@ SpacetimeDiagram.prototype.changeTime = function(t) {
         }
             this._data[i].x = this._data[i].xi+this._data[i].vx*(t-this._data[i].yi);
     }
-    this.updateEvents([],false);
+    this._updateEvents([],false);
     if(this.eventselected)this.moveSelectionLines();
 };
-SpacetimeDiagram.prototype.setReferenceEvent_Classical = function(event_index) {
-    // change event from which event are we viewing from.
-    // via Galilean transformations
-    this.newtonian = true;
-    var data = [];
-    var ref = this._data[event_index];
-    var t = this.t;
-    this.changeTime(0);
-    for (var i=0; i<this._data.length; i++){
-            data.push([
-                this._data[i].x-ref.vx*this._data[i].y, // linear translation
-                this._data[i].y,
-                this._data[i].fix_t?0:this._data[i].vx-ref.vx, // u'= u - v
-                this._data[i].fix_t, // continue (not) moving with time
-            ]);
-    }
-    this.updateEvents(data,true);
-    this.changeTime(t);
-};
-SpacetimeDiagram.prototype.setReferenceEvent_Relativistic = function(event_index) {
+
+SpacetimeDiagram.prototype.setReferenceEvent = function(event_index,newtonian) {
     // change event from which event are we viewing from.
     // via Lorentz transformations
-
-    // throw("Not yet implemented");
-    console.log("relativistic frame");
-    this.newtonian = false;
+    this.newtonian = newtonian;
     var data = [];
     var ref = Object.assign({},this._data[event_index]);
-    var t = this.t;
-    this.changeTime(ref.yi); // 
-
-    var g = 1/Math.sqrt(1-ref.vx*ref.vx); // gamma value for the current particle
-
-    // ref.xi+=this.oldoff; // *for translation to x=0
-    // var xoff = g*(ref.xi-ref.vx*ref.yi); // *for translation to x=0
-    for (var i=0; i<this._data.length; i++){
-        var p={};
-        var d=this._data[i];
-        d.lt = d.lifetime;
-
-        // d.xi+=this.oldoff;
-        
-        p.xi=g*(d.xi-ref.vx*d.yi);
-        p.yi=g*(d.yi-ref.vx*d.xi);
-        p.vx=(d.vx-ref.vx)/(1-(d.vx*ref.vx)), // u'=(u-v)/(1-uv)
-        p.lt = g*d.lt*(1-(d.vx*ref.vx))
-
-        // p.xi-=xoff; // *for translation to x=0
-        data.push([p.xi,p.yi,p.vx,d.fix_t,p.lt]);
+    if (ref.type!=="particle") return;
+    if(newtonian){
+        console.log("new newtonian frame");
+        for (var i=0; i<this._data.length; i++){
+            var p={};
+            var d=this._data[i];
+            p.xi=d.xi-ref.vx*d.yi; // x'=(x-vt)
+            p.yi=d.yi; // t'=t
+            p.vx=d.vx-ref.vx; // u'=u-v
+            p.lt = d.lt;
+            data.push([p.xi,p.yi,p.vx,p.lt,d.type,d.color]);
+        }
     }
-    // this.oldoff = xoff; // *for translation to x=0
+    else{
+    if (ref.vx===1) return;
+        console.log("new relativistic frame");
+        var g = 1/Math.sqrt(1-ref.vx*ref.vx); // gamma value for the current particle
+        for (var i=0; i<this._data.length; i++){
+            var p={};
+            var d=this._data[i];
+            p.xi=g*(d.xi-ref.vx*d.yi); // x'=g(x-vt)
+            p.yi=g*(d.yi-ref.vx*d.xi); // t'=g(t-vx)
+            p.vx=(d.vx-ref.vx)/(1-(d.vx*ref.vx)), // u'=(u-v)/(1-uv)
+            p.lt = g*d.lt*(1-(d.vx*ref.vx))
 
-    this.updateEvents(data,true);
+            data.push([p.xi,p.yi,p.vx,p.lt,d.type,d.color]);
+        }
+    }
+    console.log(data);
+    this._updateEvents(data,true);
     this.changeTime(0);
 
 };
@@ -433,19 +557,10 @@ var temp_LogParticleProperties = function(p) {
     console.log("energy "+Math.sqrt(p.E_square)+"eV");
 };  
 var st = new SpacetimeDiagram("#testgrounds",50,50,width,width);
-var spd = 0.25;
-var lt = 20;
-var xi = 0;
-var ot = 0;
-st.updateEvents([
-    [0,0,0,false,10000], // particle at rest in lab frame
-    [0,0,0,true,0], // particle at rest in
-    [xi,ot,spd,false,lt], // created particle
-    [xi,ot,0,true,0], // birth
-    [xi+spd*lt,ot+lt,0,true,0], //birth
-    [xi+spd*lt,ot+lt,2*spd,false,lt], // created particle
-    [xi+3*spd*lt,ot+2*lt,0,true,0], // death
-    [xi+spd*lt,ot+lt,0,true,0]],false); // death
+st.addParticle(0,0,0,Infinity);
+st.addParticle(35,20,0.5,30);
+st.addParticle(45,20,0.5,30);
+st.addParticle(0,0,1,Infinity);
 st.changeTime(0);
 
 })();
