@@ -1,2 +1,4 @@
 # 4vector-sim
-Educational simulation of 4-vectors and their invariances in special relativity
+Programmable spacetime diagrams for simulating problems in special relativity.
+
+Suggestions and feedback greatly appreciated.

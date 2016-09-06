@@ -11,17 +11,39 @@
             <div style = "font-size:27px;color:#666">testing...</div>
         </div>
         <div id="content">
+            Goal: Build an easy to use framework that can be used create spacetime diagrams for problems in special relativity.
             <div id="ex1">
-                Test 1
+            <br><b>Canvas 1</b>: Time dilation.<br>
+                Particle lifetime is frame dependent.
             </div>
             <div id="ex2">
-                Test 2
+                <br><b>Canvas 2</b>: Length contraction. <br>
+                Grey particles represent ends of a rod. Separation of the ends is frame dependent.
             </div>
             <div id="ex3">
-                Test 3
+                <br><b>Canvas 3</b>: Spaceship collision. <br>
+                Spaceship1 collides with an asteroid. Explosion warns spaceship2 of asteroid who instantaneously accerates to a safe speed (changing its rest frame).
             </div>
             <div id="ex4">
-                Test 4
+                <br><b>Canvas 4</b>: Twins "Paradox": a hidden asymmetry<br>
+                <b>Earth Frame</b>:
+                <!-- <ul> -->
+                    <li>Time between departure and direction change: 5 - 0 = 5yr.</li>
+                    <li>Time between direction change and arrival: 10 - 5 = 5yr.</li>
+                <!-- </ul> -->
+                Total time elapsed on earth: 5 + 5 = 10yr. <br><br>
+                <b>Spaceship Departure Frame</b>:
+                <!-- <ul> -->
+                    <li>Time between departure and direction change: 3 - 0 = 3yr.</li>
+                <!-- </ul> -->
+                    <li>Time between direction change and arrival has no meaning in this frame.</li>
+                <b>Spaceship Return Frame</b>:
+                <!-- <ul> -->
+                    <li>Time between departure and direction change has no meaning in this frame.</li>
+                    <li>Time between direction change and arrival: 16.67 - 13.67 = 3yr.</li>
+                <!-- </ul> -->
+                Total time elapsed on ship: 3 + 3 = 6yr. <br><br>
+                &#8594; Twin on spaceship arrives 4 years younger than twin sibling on earth.
             </div>
         </div>
     <script type="text/javascript" src="d3.v4.min.js"></script>
