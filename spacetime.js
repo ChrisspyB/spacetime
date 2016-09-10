@@ -1,15 +1,17 @@
 "use strict"
-var SpacetimeDiagram = function(div,xmin,xmax,ymax,w,h,newtonian) {
+var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
     // SVG diagram displaying ct against x
     // div is the html element id (#string) to which the svg is appended
     // xmax(ymax): max value for x(y) domain.
     // There should never be more than one SpacetimeDiagram per div!
 
     if(typeof newtonian === "undefined") newtonian = false;
-
     var that = this;
     this.div = div;
     this.tstep = 1;
+    this.xmin = xmin;
+    this.xmax = xmax;
+    this.ymin = ymin;
     this.ymax = ymax;
     this.pointevents = []; // list of point events to be plotted (as circles)
     this.eventselected = false; // is an event currently selected?
@@ -25,7 +27,9 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymax,w,h,newtonian) {
     this.waitframe = false; // for preventing overlapping animation calls.
     this.framelength = 100;
     // conventional d3 margin setup
-    this.margin = {top: 20, right: 20, bottom: 50, left: 70},
+    // NOTE: the rotations used in this code assume that
+    // top+bottom === right+left. So don't change this! 
+    this.margin = {top: 20, right: 20, bottom: 50, left: 50},
     this.width = w - this.margin.left - this.margin.right,
     this.height = h - this.margin.top - this.margin.bottom;
     //
@@ -46,7 +50,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymax,w,h,newtonian) {
     
     // scaling functions
     this.yscale = d3.scaleLinear()
-        .domain([0,ymax])
+        .domain([ymin,ymax])
         .range([this.height,0]);
 
     this.xscale = d3.scaleLinear()
@@ -55,7 +59,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymax,w,h,newtonian) {
 
     // add x axis
     this.svg.append("g")
-        .attr("transform", "translate(0," + this.height + ")")
+        .attr("transform", "translate(0," + this.yscale(0) + ")").attr("display","none")
         .call(d3.axisBottom(this.xscale));
 
     this.svg.append("text")
@@ -67,15 +71,27 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymax,w,h,newtonian) {
 
     // add y axis
     this.svg.append("g")
-        .call(d3.axisLeft(this.yscale));
+        .call(d3.axisLeft(this.yscale))
+        .attr("transform","translate("+this.xscale(0)+",0)").attr("display","none");
     this.svg.append("text")
         .attr("transform", "rotate(-90)")
         .attr("y", 0 - this.margin.left)
         .attr("x",0 - (this.height / 2))
         .attr("dy", "1em")
         .style("text-anchor", "middle")
-        .text("ct"); 
+        .text("ct");
 
+    // add x' axis
+
+    this.axis_xprime=this.svg.append("g")
+        // .attr("transform", "translate(0," + this.height + ")")
+        .call(d3.axisBottom(this.xscale));
+
+    // add y' axis
+    this.axis_yprime=this.svg.append("g")
+        .call(d3.axisLeft(this.yscale));
+
+    this.updatePrimeAxes(0);
     // --------------------------------
 
     this.active = this.svg.append("g")
@@ -91,23 +107,42 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymax,w,h,newtonian) {
     this.svg.append("line") // light-like line seperating space-like and time-like
         .attr("x1",this.xscale(0))
         .attr("y1",this.yscale(0))
-        .attr("x2",this.xscale(xmax))
+        .attr("x2",this.xscale(ymax))
         .attr("y2",this.yscale(ymax))
         .style("stroke","black")
         .style("stroke-dasharray","3,3");
     this.svg.append("line") // light-like line seperating space-like and time-like
         .attr("x1",this.xscale(0))
         .attr("y1",this.yscale(0))
-        .attr("x2",this.xscale(-xmax))
+        .attr("x2",this.xscale(-ymax))
         .attr("y2",this.yscale(ymax))
         .style("stroke","black")
         .style("stroke-dasharray","3,3");
 
     this.eventsgroup = this.svg.append("g"); // svg element that will hold all events
 
+    this.tempcone1 = this.svg.append("line")
+        .style("stroke","black");
+    this.tempcone2 = this.svg.append("line")
+        .style("stroke","black");
+        
+    this.tempBirth = this.svg.append("circle")
+        .classed("event temp",true)
+        .style("fill","none")
+        .style("stroke","red")
+        .style("display","none")
+        .attr("r",this.event_marker_r);
+
+    this.tempDeath = this.svg.append("circle")
+        .classed("event temp",true)
+        .style("fill","none")
+        .style("stroke","blue")
+        .style("display","none")
+        .attr("r",this.event_marker_r);
+
     this.t_slider = d3.select(this.div).append("input")
         .attr("type","range")
-        .attr("min",0)
+        .attr("min",ymin)
         .attr("max",ymax)
         .attr("value",0)
         .on("change",function() {
@@ -151,24 +186,23 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymax,w,h,newtonian) {
         .on("click",function() {
             alert("not yet implemented");
         })
+};
+SpacetimeDiagram.prototype.updatePrimeAxes = function(v) {
+    // Rotates the prime axes by arctan(v)
+    var ar = Math.atan(v);
+    var ad = ar*180/Math.PI;
+    var ly = this.yscale(this.ymin)-this.yscale(this.ymax);
+    var yxt = ly*Math.sin(ar)/2;
+    var yyt = ly*(1-Math.cos(ar))/2;
+    var lx = this.xscale(this.xmin)-this.xscale(this.xmax);
+    var xyt = lx*Math.sin(ar)/2;
+    var xxt = -lx*(1-Math.cos(ar))/2;
 
-    this.tempcone1 = this.svg.append("line")
-        .style("stroke","black");
-    this.tempcone2 = this.svg.append("line")
-        .style("stroke","black");
-    this.tempBirth = this.svg.append("circle")
-        .classed("event temp",true)
-        .style("fill","none")
-        .style("stroke","red")
-        .style("display","none")
-        .attr("r",this.event_marker_r);
+    this.axis_xprime.attr("transform",
+        ["translate(",xxt,",",this.yscale(0)-xyt,") rotate(",-ad,")"].join(""));
 
-    this.tempDeath = this.svg.append("circle")
-        .classed("event temp",true)
-        .style("fill","none")
-        .style("stroke","blue")
-        .style("display","none")
-        .attr("r",this.event_marker_r);
+    this.axis_yprime.attr("transform",
+        ["translate(",this.xscale(0)+yxt,",",yyt,") rotate(",ad,")"].join(""));
 };
 SpacetimeDiagram.prototype.setMode = function(newmode) {
     var that = this;
@@ -328,7 +362,7 @@ SpacetimeDiagram.prototype.updateSelection = function(e_marker,i) {
     this.selectedIndex = i;
     this.eventselected = true;
     d3.select(e_marker).classed("selected",true);
-    d3.select(e_marker).attr("class","selected");
+    this.updatePrimeAxes(this._data[i].vx);
     this.updateSelectionInfo();
 };
 SpacetimeDiagram.prototype.user_AddParticle_Clicks = function(xb,tb,xd,td) {
