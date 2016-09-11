@@ -6,6 +6,9 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
     // There should never be more than one SpacetimeDiagram per div!
 
     if(typeof newtonian === "undefined") newtonian = false;
+    if(xmin>0 || xmax<0 || ymin>0 || ymax<0){
+        throw("Currently, rotations cannot be displayed without a 0,0 origin")
+    }
     var that = this;
     this.div = div;
     this.tstep = 1;
@@ -59,7 +62,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
 
     // add x axis
     this.svg.append("g")
-        .attr("transform", "translate(0," + this.yscale(0) + ")").attr("display","none")
+        .attr("transform", "translate(0," + this.yscale(0) + ")")
         .call(d3.axisBottom(this.xscale));
 
     this.svg.append("text")
@@ -72,7 +75,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
     // add y axis
     this.svg.append("g")
         .call(d3.axisLeft(this.yscale))
-        .attr("transform","translate("+this.xscale(0)+",0)").attr("display","none");
+        .attr("transform","translate("+this.xscale(0)+",0)");
     this.svg.append("text")
         .attr("transform", "rotate(-90)")
         .attr("y", 0 - this.margin.left)
@@ -84,14 +87,11 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
     // add x' axis
 
     this.axis_xprime=this.svg.append("g")
-        // .attr("transform", "translate(0," + this.height + ")")
         .call(d3.axisBottom(this.xscale));
 
     // add y' axis
     this.axis_yprime=this.svg.append("g")
         .call(d3.axisLeft(this.yscale));
-
-    this.updatePrimeAxes(0);
     // --------------------------------
 
     this.active = this.svg.append("g")
@@ -180,29 +180,40 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
     d3.select(this.div).append("button").html(" ADD PARTICLE ")
         .on("click",function() {
             that.setMode("addingBirth");
-        })
-
+        });
     d3.select(this.div).append("button").html(" CLEAR ALL ")
         .on("click",function() {
             alert("not yet implemented");
-        })
+        });
+
+    this.updatePrimeAxes(0);
 };
 SpacetimeDiagram.prototype.updatePrimeAxes = function(v) {
-    // Rotates the prime axes by arctan(v)
-    var ar = Math.atan(v);
-    var ad = ar*180/Math.PI;
-    var ly = this.yscale(this.ymin)-this.yscale(this.ymax);
-    var yxt = ly*Math.sin(ar)/2;
-    var yyt = ly*(1-Math.cos(ar))/2;
-    var lx = this.xscale(this.xmin)-this.xscale(this.xmax);
-    var xyt = lx*Math.sin(ar)/2;
-    var xxt = -lx*(1-Math.cos(ar))/2;
+    // Handles of rotation of prime axes, relative velocity of new frame
+    // If the t and x axes have the same scale (as==1) this will 
+    // rotate the prime axes by arctan(v)
+    var as = (this.ymax-this.ymin)/(this.xmax-this.xmin);
 
-    this.axis_xprime.attr("transform",
-        ["translate(",xxt,",",this.yscale(0)-xyt,") rotate(",-ad,")"].join(""));
+    var ary = Math.atan(v*as);
+    var arx = Math.atan(v/as);
 
+    var yp = Math.abs(this.yscale(this.ymax)-this.yscale(0));
+    var xm = Math.abs(this.xscale(0)-this.xscale(this.xmin));
+
+    this.axis_xprime.attr("transform",["translate(",
+        xm*(1-Math.cos(arx)), // 
+        ",",
+        this.yscale(0)+xm*Math.sin(arx),
+        ") rotate(",
+        -arx*180/Math.PI,
+        ")"].join(""));
     this.axis_yprime.attr("transform",
-        ["translate(",this.xscale(0)+yxt,",",yyt,") rotate(",ad,")"].join(""));
+        ["translate(",
+            this.xscale(0)+yp*Math.sin(ary),
+            ",",
+            yp*(1-Math.cos(ary)),
+            ") rotate(",ary*180/Math.PI,
+            ")"].join(""));
 };
 SpacetimeDiagram.prototype.setMode = function(newmode) {
     var that = this;

@@ -21,7 +21,7 @@ ex3.addParticle(10,15,0.6,false,Infinity,"spaceship2_Fast","red");
 ex3.addEvent(5,10,"collision");
 ex3.addEvent(10,15,"collisionDetected");
 //twins
-var ex4 = new SpacetimeDiagram("#ex4",-20,20,0,20,width,width,false);
+var ex4 = new SpacetimeDiagram("#ex4",-20,20,-20,20,width,width,false);
 ex4.tstep=0.5;
 ex4.addParticle(0,-50,0,true,Infinity,"earth","blue");
 ex4.addParticle(0,0,0.8,false,5,"spaceshipLeaving","red");
