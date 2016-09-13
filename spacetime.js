@@ -19,7 +19,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
     this.pointevents = []; // list of point events to be plotted (as circles)
     this.eventselected = false; // is an event currently selected?
     this.selectedIndex = 0;
-    this.newtonian = newtonian; // is this currently displaying newtonian physics?
+    this.newtonian = newtonian; // is this diagram displaying newtonian physics?
     this.event_marker_r = 10; // radius of circle representing point events
     this.selection_axes_l = 5; // length (before scaling) of axes drawn on selection
     this._data = [];
@@ -30,16 +30,15 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
     this.waitframe = false; // for preventing overlapping animation calls.
     this.framelength = 100;
     // conventional d3 margin setup
-    // NOTE: the rotations used in this code assume that
-    // top+bottom === right+left. So don't change this! 
     this.margin = {top: 20, right: 20, bottom: 50, left: 50};
     this.width = w - this.margin.left - this.margin.right;
     this.height = h - this.margin.top - this.margin.bottom;
-    this.aspect_ratio = this.width/this.height; // for dealing with rotations.
-    //
+    this.angle_scale = (this.ymax-this.ymin)/((this.xmax-this.xmin))
+        *this.width/this.height; // for dealing with rotations.
+    // 
     this.particlecount = 0;
     this.colors = ["red","orange","green","blue","cyan"];
-    //
+    // 
     this._mode = "normal" // "normal", "addingBirth","addingDeath"
     // add svg object and translate group to top left margin
     this.svg = d3.select(div).append("svg")
@@ -56,7 +55,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
 
     d3.select(div).append("div")
         .classed("buttons",true);
-
+    
     // ---------- Set up axes ----------
     
     // scaling functions
@@ -99,7 +98,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
     // add y' axis
     this.axis_yprime=this.svg.append("g")
         .call(d3.axisLeft(this.yscale));
-    // --------------------------------
+    // ---------------------------------
 
     this.active = this.svg.append("g")
 
@@ -132,20 +131,27 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
         .style("stroke","black");
     this.tempcone2 = this.svg.append("line")
         .style("stroke","black");
-        
     this.tempBirth = this.svg.append("circle")
         .classed("event temp",true)
         .style("fill","none")
         .style("stroke","red")
         .style("display","none")
         .attr("r",this.event_marker_r);
-
     this.tempDeath = this.svg.append("circle")
         .classed("event temp",true)
         .style("fill","none")
         .style("stroke","blue")
         .style("display","none")
         .attr("r",this.event_marker_r);
+
+    this.construct_x = this.svg.append("line")
+        .style("stroke","red")
+        .style("stroke-dasharray","2,2");
+    this.construct_t = this.svg.append("line")
+        .style("stroke","blue")
+        .style("stroke-dasharray","2,2");
+
+    // Sliders and buttons
 
     d3.select(this.div+" .buttons").append("span")
         .html("S Frame Properties: ");
@@ -161,10 +167,8 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
         .html(" t: "+parseFloat(this.t_slider.property("value")).toFixed(2));
 
     d3.select(this.div+" .buttons").append("br")
-        
     d3.select(this.div+" .buttons").append("span")
             .html("S' Frame Properties: ");
-    
     this.prime_slide = d3.select(this.div+" .buttons").append("input")
         .attr("type","range")
         .attr("min",-1)
@@ -178,13 +182,11 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
     this.prime_slide_txt = d3.select(this.div+" .buttons").append("span");
 
     d3.select(this.div+" .buttons").append("br");
-
     d3.select(this.div+" .buttons").append("button").html(" TRANSFORM ")
         .on("click",function() {
             // transform to the prime axes
             that.transformFrame(that.prime_vel);
         });
-
     d3.select(this.div+" .buttons").append("button").html(" PLAY ")
         .on("click",function() {
             that.animating = !that.animating;
@@ -207,6 +209,11 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
         .on("click",function() {
             alert("not yet implemented");
         });
+    d3.select(this.div+" .buttons").append("br");
+    this.checkbox_con = d3.select(this.div+" .buttons").append("input")
+        .attr("type","checkbox")
+        .property("checked",true);
+    d3.select(this.div+" .buttons").append("span").html("Show Construction Lines");
 
     this.updatePrimeAxes(0);
 };
@@ -214,17 +221,13 @@ SpacetimeDiagram.prototype.updatePrimeAxes = function(v) {
     // Handles of rotation of prime axes, relative velocity of new frame
     // If the t and x axes have the same scale (as==1) this will 
     // rotate the prime axes by arctan(v)
-    var as = (this.ymax-this.ymin)/((this.xmax-this.xmin))*this.aspect_ratio;
 
-    var ary = Math.atan(v*as); // angle (rad) to rotate y-axis
-    var arx = Math.atan(v/as); // angle (rad) to rotate x-axis
-    console.log(arx*180/Math.PI,ary*180/Math.PI);
-    // length of postive y-axis    
-    var yp = Math.abs(this.yscale(this.ymax)-this.yscale(0)); 
-    // length of negative x-axis
-    var xm = Math.abs(this.xscale(0)-this.xscale(this.xmin));
+    var ary = Math.atan(v*this.angle_scale); // angle (rad) to rotate y-axis
+    var arx = Math.atan(v/this.angle_scale); // angle (rad) to rotate x-axis
+    var yp = Math.abs(this.yscale(this.ymax)-this.yscale(0)); // length of postive y-axis
+    var xm = Math.abs(this.xscale(0)-this.xscale(this.xmin)); // length of negative x-axis
 
-    // Rotations are not about (0,0) so translations are also required.
+    // Rotations are not about (0,0) so translations are also required
     this.axis_xprime.attr("transform",["translate(",
         xm*(1-Math.cos(arx)), // x translation
         ",",this.yscale(0)+xm*Math.sin(arx), // y translation
@@ -236,11 +239,12 @@ SpacetimeDiagram.prototype.updatePrimeAxes = function(v) {
             ") rotate(",ary*180/Math.PI, // rotate (deg)
             ")"].join(""));
 
-    // Ensure the slider is up to date.
+    // Ensure the slider is up to date
     this.prime_vel = v;
     this.prime_slide.property("value",v);
     this.prime_slide_txt
         .html("Prime velocity: "+v.toFixed(2)+"c");
+    this.updateConstructionLines();
 };
 SpacetimeDiagram.prototype.setMode = function(newmode) {
     var that = this;
@@ -382,8 +386,8 @@ SpacetimeDiagram.prototype._updateEvents = function(arr,cleardata) {
     events.exit().remove();
 };
 SpacetimeDiagram.prototype.updateSelection = function(element,i) {
-    //element: svg element representing the event
-    //i: index of new selection
+    // element: svg element representing the event
+    // i: index of new selection
     if(this._mode!=="normal") return;
     if(this.eventselected){ // deselect previous
         d3.select(".selected")
@@ -402,8 +406,41 @@ SpacetimeDiagram.prototype.updateSelection = function(element,i) {
     this.eventselected = true;
     d3.select(element).classed("selected",true);
     this.updateSelectionInfo();
+    this.updateConstructionLines();
+};
+SpacetimeDiagram.prototype.updateConstructionLines = function() {
+    // if enabled...
+    if(!this.checkbox_con.property("checked")){
+        this.construct_t.attr("display","none");
+        this.construct_x.attr("display","none");
+        return;
+    } 
+    if(!this.eventselected) return;
+    if(Math.abs(this.prime_vel)>=1) return;
+
+    var e = this._data[this.selectedIndex];
+    var ary = -Math.atan(this.prime_vel*(this.angle_scale)); // angle (rad) of y-axis rotation
+    var arx = -Math.atan(this.prime_vel/(this.angle_scale)); // angle (rad) of x-axis rotation
+    
+    var g = 1/Math.sqrt(1-this.prime_vel*this.prime_vel); // lorentz factor
+    var x = g*(e.x-this.prime_vel*e.y); // x' = g(x-vt)
+    var y = g*(e.y-this.prime_vel*e.x); // t' = g(t-vx)
+
+    this.construct_t
+        .attr("x1",this.xscale(e.x))
+        .attr("y1",this.yscale(e.y))
+        .attr("x2",this.yscale(y*Math.sin(ary)))
+        .attr("y2",this.yscale(y*Math.cos(ary)))
+        .attr("display","inline");
+    this.construct_x
+        .attr("x1",this.xscale(e.x))
+        .attr("y1",this.yscale(e.y))
+        .attr("x2",this.xscale(x*Math.cos(arx)))
+        .attr("y2",this.xscale(x*Math.sin(arx)))
+        .attr("display","inline");
 };
 SpacetimeDiagram.prototype.user_AddParticle_Clicks = function(xb,tb,xd,td) {
+
     this.addParticle(xb,tb,(xd-xb)/(td-tb),false,td-tb);
 };
 SpacetimeDiagram.prototype.addParticle = function(xb,tb,u,omni,lt,desc,color) {
@@ -460,7 +497,7 @@ SpacetimeDiagram.prototype.addEvent = function(x,t,desc,color) {
 SpacetimeDiagram.prototype.animate = function() {
     var that = this;
     if(!this.waitframe){
-        this.waitframe=true; //prevent overlapping animation calls.
+        this.waitframe=true; // prevent overlapping animation calls.
         setTimeout(function(){
             that.waitframe=false;
             if (!that.animating) return;
@@ -500,6 +537,7 @@ SpacetimeDiagram.prototype.updateSelectionInfo = function() {
             (this._data[i].y*this._data[i].y
                 -this._data[i].x*this._data[i].x).toFixed(2)
             ].join(""));
+    this.updateConstructionLines();
 };
 SpacetimeDiagram.prototype.changeTime = function(t) {
     this.t = t;
@@ -550,7 +588,7 @@ SpacetimeDiagram.prototype.transformFrame = function(v) {
             data.push([
                 d.xi-v*d.yi, // x' = x-vt
                 d.yi, // t' = t
-                d.vx-v, // u' = u-v
+                d.type==="particle"?d.vx-v:0, // u' = u-v or 0 for static events
                 d.lt,d.type,d.color,d.desc,d.omni]);
         }
         this.lab_vel = this.lab_vel + v;
@@ -563,14 +601,14 @@ SpacetimeDiagram.prototype.transformFrame = function(v) {
             data.push([
                 g*(d.xi-v*d.yi), // x' = g(x-vt)
                 g*(d.yi-v*d.xi), // t' = g(t-vx)
-                (d.vx-v)/(1-d.vx*v), // u' = (u-v)/(1-uv)
+                d.type==="particle"?(d.vx-v)/(1-d.vx*v):0, // u' = (u-v)/(1-uv) or 0 for static events
                 g*d.lt*(1-(d.vx*v)), // t_death' - t_birth'
                 d.type,d.color,d.desc,d.omni]);
         }
         this.lab_vel = (this.lab_vel-v)/(1-this.lab_vel*v);
     }
     this._updateEvents(data,true);
-    this.changeTime(this.t);
+    this.changeTime(0);
     this.updatePrimeAxes(0); // reset prime axes
 };
 SpacetimeDiagram.prototype.setParticleFrame = function(event_index) {
