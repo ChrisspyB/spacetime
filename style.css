@@ -25,7 +25,15 @@ body {
     letter-spacing: 1px;
     font-style: italic;
 }
-
+.statusbar{
+    background: black;
+    color: white;
+    font-family: monospace;
+    text-align: center;
+}
+.buttons{
+    background: darkgrey;
+}
 /*svg*/
 svg{
     -webkit-user-select: none;  /* Chrome all / Safari all */

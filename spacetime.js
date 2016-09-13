@@ -24,7 +24,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
     this.selection_axes_l = 5; // length (before scaling) of axes drawn on selection
     this._data = [];
     this.lab_vel = 0;
-    this.oldoff = 0;
+    this.prime_vel = 0;
     this.t = 0; // current time (simulation run-time)
     this.animating = false;
     this.waitframe = false; // for preventing overlapping animation calls.
@@ -32,9 +32,10 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
     // conventional d3 margin setup
     // NOTE: the rotations used in this code assume that
     // top+bottom === right+left. So don't change this! 
-    this.margin = {top: 20, right: 20, bottom: 50, left: 50},
-    this.width = w - this.margin.left - this.margin.right,
+    this.margin = {top: 20, right: 20, bottom: 50, left: 50};
+    this.width = w - this.margin.left - this.margin.right;
     this.height = h - this.margin.top - this.margin.bottom;
+    this.aspect_ratio = this.width/this.height; // for dealing with rotations.
     //
     this.particlecount = 0;
     this.colors = ["red","orange","green","blue","cyan"];
@@ -48,7 +49,14 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
     .append("g")
         .attr("transform",
         "translate(" + this.margin.left + "," + this.margin.top + ")");
-    
+
+    this.statusbar = d3.select(div).append("div")
+        .classed("statusbar",true)
+        .html("Statusbar default text");
+
+    d3.select(div).append("div")
+        .classed("buttons",true);
+
     // ---------- Set up axes ----------
     
     // scaling functions
@@ -85,7 +93,6 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
         .text("ct");
 
     // add x' axis
-
     this.axis_xprime=this.svg.append("g")
         .call(d3.axisBottom(this.xscale));
 
@@ -105,15 +112,15 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
     this.hovertext = this.svg.append("text");
 
     this.svg.append("line") // light-like line seperating space-like and time-like
-        .attr("x1",this.xscale(0))
-        .attr("y1",this.yscale(0))
+        .attr("x1",this.xscale(ymin))
+        .attr("y1",this.yscale(ymin))
         .attr("x2",this.xscale(ymax))
         .attr("y2",this.yscale(ymax))
         .style("stroke","black")
         .style("stroke-dasharray","3,3");
     this.svg.append("line") // light-like line seperating space-like and time-like
-        .attr("x1",this.xscale(0))
-        .attr("y1",this.yscale(0))
+        .attr("x1",this.xscale(-ymin))
+        .attr("y1",this.yscale(ymin))
         .attr("x2",this.xscale(-ymax))
         .attr("y2",this.yscale(ymax))
         .style("stroke","black")
@@ -140,7 +147,9 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
         .style("display","none")
         .attr("r",this.event_marker_r);
 
-    this.t_slider = d3.select(this.div).append("input")
+    d3.select(this.div+" .buttons").append("span")
+        .html("S Frame Properties: ");
+    this.t_slider = d3.select(this.div+" .buttons").append("input")
         .attr("type","range")
         .attr("min",ymin)
         .attr("max",ymax)
@@ -148,40 +157,53 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
         .on("change",function() {
             that.changeTime(parseFloat(d3.select(this).property("value")));
         });
-    this.t_slider_txt = d3.select(this.div).append("span")
+    this.t_slider_txt = d3.select(this.div+" .buttons").append("span")
         .html(" t: "+parseFloat(this.t_slider.property("value")).toFixed(2));
 
-    this.u_slider = d3.select(this.div).append("input")
+    d3.select(this.div+" .buttons").append("br")
+        
+    d3.select(this.div+" .buttons").append("span")
+            .html("S' Frame Properties: ");
+    
+    this.prime_slide = d3.select(this.div+" .buttons").append("input")
         .attr("type","range")
-        .attr("min",-0.99)
-        .attr("max",0.99)
-        .attr("value",0)
+        .attr("min",-1)
+        .attr("max",1)
+        .attr("value",this.prime_vel)
         .attr("step",0.01)
-        .on("change",function() {
-            that.setLabVel(parseFloat(d3.select(this).property("value")));
+    .on("change",function() {
+            that.updatePrimeAxes(parseFloat(d3.select(this).property("value")));
+            // that.setLabVel(parseFloat(d3.select(this).property("value")));
         });
-    this.u_slider_txt= d3.select(this.div).append("span")
-        .html("lab vel: "+parseFloat(this.u_slider.property("value")).toFixed(2)+"c");
+    this.prime_slide_txt = d3.select(this.div+" .buttons").append("span");
 
-    d3.select(this.div).append("button").html(" PLAY ")
+    d3.select(this.div+" .buttons").append("br");
+
+    d3.select(this.div+" .buttons").append("button").html(" TRANSFORM ")
+        .on("click",function() {
+            // transform to the prime axes
+            that.transformFrame(that.prime_vel);
+        });
+
+    d3.select(this.div+" .buttons").append("button").html(" PLAY ")
         .on("click",function() {
             that.animating = !that.animating;
             that.animate();
         });
-    d3.select(this.div).append("button").html(" t = 0 ")
+    d3.select(this.div+" .buttons").append("button").html(" t = 0 ")
         .on("click",function() {
             that.animating = false;
             that.changeTime(0);
         });
-    d3.select(this.div).append("button").html(" u = 0 ")
+    d3.select(this.div+" .buttons").append("button").html(" LAB FRAME ")
         .on("click",function() {
             that.setLabVel(0);
         });
-    d3.select(this.div).append("button").html(" ADD PARTICLE ")
+    d3.select(this.div+" .buttons").append("button").html(" ADD PARTICLE ")
         .on("click",function() {
             that.setMode("addingBirth");
         });
-    d3.select(this.div).append("button").html(" CLEAR ALL ")
+    d3.select(this.div+" .buttons").append("button").html(" CLEAR ALL ")
         .on("click",function() {
             alert("not yet implemented");
         });
@@ -192,28 +214,33 @@ SpacetimeDiagram.prototype.updatePrimeAxes = function(v) {
     // Handles of rotation of prime axes, relative velocity of new frame
     // If the t and x axes have the same scale (as==1) this will 
     // rotate the prime axes by arctan(v)
-    var as = (this.ymax-this.ymin)/(this.xmax-this.xmin);
+    var as = (this.ymax-this.ymin)/((this.xmax-this.xmin))*this.aspect_ratio;
 
-    var ary = Math.atan(v*as);
-    var arx = Math.atan(v/as);
-
-    var yp = Math.abs(this.yscale(this.ymax)-this.yscale(0));
+    var ary = Math.atan(v*as); // angle (rad) to rotate y-axis
+    var arx = Math.atan(v/as); // angle (rad) to rotate x-axis
+    console.log(arx*180/Math.PI,ary*180/Math.PI);
+    // length of postive y-axis    
+    var yp = Math.abs(this.yscale(this.ymax)-this.yscale(0)); 
+    // length of negative x-axis
     var xm = Math.abs(this.xscale(0)-this.xscale(this.xmin));
 
+    // Rotations are not about (0,0) so translations are also required.
     this.axis_xprime.attr("transform",["translate(",
-        xm*(1-Math.cos(arx)), // 
-        ",",
-        this.yscale(0)+xm*Math.sin(arx),
-        ") rotate(",
-        -arx*180/Math.PI,
+        xm*(1-Math.cos(arx)), // x translation
+        ",",this.yscale(0)+xm*Math.sin(arx), // y translation
+        ") rotate(",-arx*180/Math.PI, // rotate (deg) 
         ")"].join(""));
-    this.axis_yprime.attr("transform",
-        ["translate(",
-            this.xscale(0)+yp*Math.sin(ary),
-            ",",
-            yp*(1-Math.cos(ary)),
-            ") rotate(",ary*180/Math.PI,
+    this.axis_yprime.attr("transform",["translate(",
+            this.xscale(0)+yp*Math.sin(ary), // x translation
+            ",",yp*(1-Math.cos(ary)), // y translation
+            ") rotate(",ary*180/Math.PI, // rotate (deg)
             ")"].join(""));
+
+    // Ensure the slider is up to date.
+    this.prime_vel = v;
+    this.prime_slide.property("value",v);
+    this.prime_slide_txt
+        .html("Prime velocity: "+v.toFixed(2)+"c");
 };
 SpacetimeDiagram.prototype.setMode = function(newmode) {
     var that = this;
@@ -354,8 +381,8 @@ SpacetimeDiagram.prototype._updateEvents = function(arr,cleardata) {
     // Remove any no longer present data
     events.exit().remove();
 };
-SpacetimeDiagram.prototype.updateSelection = function(e_marker,i) {
-    //e_marker: 
+SpacetimeDiagram.prototype.updateSelection = function(element,i) {
+    //element: svg element representing the event
     //i: index of new selection
     if(this._mode!=="normal") return;
     if(this.eventselected){ // deselect previous
@@ -363,17 +390,17 @@ SpacetimeDiagram.prototype.updateSelection = function(e_marker,i) {
             .classed("selected",false);
         
         if (this.selectedIndex === i) {
+            // If clicked twice
             this.eventselected = false;
             this.hovertext.style("opacity",0);
             this.active_line.attr("display","none");
-            this.setParticleFrame(i);
+            this.updatePrimeAxes(this._data[i].vx);
             return;
         }
     }
     this.selectedIndex = i;
     this.eventselected = true;
-    d3.select(e_marker).classed("selected",true);
-    this.updatePrimeAxes(this._data[i].vx);
+    d3.select(element).classed("selected",true);
     this.updateSelectionInfo();
 };
 SpacetimeDiagram.prototype.user_AddParticle_Clicks = function(xb,tb,xd,td) {
@@ -507,15 +534,15 @@ SpacetimeDiagram.prototype.setLabVel = function(a) {
     if (this.newtonian) {
         alert("untested for newtonian frames...");
         // v = u - u' with u' = a
-        this.TransformFrame(this.lab_vel-a);
+        this.transformFrame(this.lab_vel-a);
     }else{
         // v = (u-u')/(1-uu') with u' = a
-        this.TransformFrame((this.lab_vel-a)/(1-this.lab_vel*a));
+        this.transformFrame((this.lab_vel-a)/(1-this.lab_vel*a));
     }
 };
-SpacetimeDiagram.prototype.TransformFrame = function(v) {
+SpacetimeDiagram.prototype.transformFrame = function(v) {
     // Transforms events to a new frame using Lorentz transforms
-    // v is the velocity of the new frame, relative to the current one.
+    // v is the velocity of the new frame, relative to the *current* one.
     var data = [];
     if(this.newtonian){
         for (var i=0; i<this._data.length; i++){
@@ -543,13 +570,11 @@ SpacetimeDiagram.prototype.TransformFrame = function(v) {
         this.lab_vel = (this.lab_vel-v)/(1-this.lab_vel*v);
     }
     this._updateEvents(data,true);
-    this.changeTime(0);
-    this.u_slider.property("value",this.lab_vel);
-    this.u_slider_txt
-        .html("lab vel: "+parseFloat(this.u_slider.property("value")).toFixed(2)+"c");
+    this.changeTime(this.t);
+    this.updatePrimeAxes(0); // reset prime axes
 };
 SpacetimeDiagram.prototype.setParticleFrame = function(event_index) {
     // update the frame velocity such that the given particle is at rest.
     if (this._data[event_index].type!=="particle") return;
-    this.TransformFrame(this._data[event_index].vx);
+    this.transformFrame(this._data[event_index].vx);
 };
