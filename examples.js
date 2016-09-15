@@ -5,11 +5,13 @@ var width = 840;
 var ex1 = new SpacetimeDiagram("#ex1",0,50,0,50,width,width,false);
 ex1.addParticle(0,0,0,true,Infinity,"lab");
 ex1.addParticle(0,0,0.5,false,20,"particle");
+ex1.changeTime(0);
 //
 var ex2 = new SpacetimeDiagram("#ex2",0,50,0,50,width,width,false);
-ex2.addParticle(0,-50,0,true,Infinity,"lab");
+ex2.addParticle(0,0,0,true,Infinity,"lab");
 ex2.addParticle(0,0,0.9,true,Infinity,"rodLeft","grey");
 ex2.addParticle(10,0,0.9,true,Infinity,"rodRight","grey");
+ex2.changeTime(0);
 //asteroid warning
 var ex3 = new SpacetimeDiagram("#ex3",0,30,0,25,width,width,false);
 ex3.tstep=0.5;
@@ -20,12 +22,14 @@ ex3.addParticle(5,10,1,false,5,"explosion");
 ex3.addParticle(10,15,0.6,false,Infinity,"spaceship2_Fast","red");
 ex3.addEvent(5,10,"collision");
 ex3.addEvent(10,15,"collisionDetected");
+ex3.changeTime(0);
 //twins
 var ex4 = new SpacetimeDiagram("#ex4",-20,20,-20,20,width,width,false);
 ex4.tstep=0.5;
-ex4.addParticle(0,-50,0,true,Infinity,"earth","blue");
+ex4.addParticle(0,0,0,true,Infinity,"earth","blue");
 ex4.addParticle(0,0,0.8,false,5,"spaceshipLeaving","red");
 ex4.addParticle(4,5,-0.8,false,5,"spaceshipReturning","red");
 ex4.addEvent(0,0,"departure");
 ex4.addEvent(4,5,"turnAround");
 ex4.addEvent(0,10,"arrival");
+ex4.changeTime(0);
