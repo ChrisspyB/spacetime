@@ -31,7 +31,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
     this.waitframe = false; // for preventing overlapping animation calls.
     this.framelength = 100;
     // conventional d3 margin setup
-    this.margin = {top: 20, right: 20, bottom: 50, left: 50};
+    this.margin = {top: 100, right: 20, bottom: 50, left: 50};
     this.width = w - this.margin.left - this.margin.right;
     this.height = h - this.margin.top - this.margin.bottom;
     this.angle_scale = (this.ymax-this.ymin)/((this.xmax-this.xmin))
@@ -152,6 +152,13 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
         .style("stroke","blue")
         .style("stroke-dasharray","2,2");
 
+    this.construct_x_mark = this.svg.append("circle")
+        .style("fill","red")
+        .style("r",3);
+    this.construct_t_mark = this.svg.append("circle")
+        .style("fill","blue")
+        .style("r",3);
+
     // Sliders and buttons
 
     d3.select(this.div+" .buttons").append("span")
@@ -218,7 +225,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
 
     this.checkbox_world = d3.select(this.div+" .buttons").append("input")
         .attr("type","checkbox")
-        .property("checked",true);
+        .property("checked",false);
     d3.select(this.div+" .buttons").append("span").html("Show worldlines");
 
     this.updatePrimeAxes(0);
@@ -395,7 +402,7 @@ SpacetimeDiagram.prototype._updateEvents = function(arr,cleardata) {
         .attr("cx",function(d){return that.xscale(d.x);})
         .attr("cy",function(d){return that.yscale(d.y);})
     worldlines.enter().append("line")
-        .style("stroke",function(d) {return d.color})
+        .style("stroke",function(d) {return "black"})
         .style("opacity",0.5);
     worldlines
         .attr("x1",function(d) {
@@ -440,32 +447,55 @@ SpacetimeDiagram.prototype.updateSelection = function(element,i) {
 };
 SpacetimeDiagram.prototype.updateConstructionLines = function() {
     // if enabled...
-    if(!this.checkbox_con.property("checked") || Math.abs(this.prime_vel)>=1){
+    if(!this.eventselected||!this.checkbox_con.property("checked") || Math.abs(this.prime_vel)>=1){
         this.construct_t.attr("display","none");
         this.construct_x.attr("display","none");
+        this.construct_t_mark.attr("display","none");
+        this.construct_x_mark.attr("display","none");
         return;
     } 
-    if(!this.eventselected) return;
     //(this.ymax-this.ymin)/((this.xmax-this.xmin))
     var e = this._data[this.selectedIndex];
-    var ary = -Math.atan(this.prime_vel*(1)); // angle (rad) of y-axis rotation
-    var arx = -Math.atan(this.prime_vel/(1)); // angle (rad) of x-axis rotation
+    var s = this.angle_scale;
+    //*(this.height/this.width);
+    // s = 1;
+    var ary = Math.atan(this.prime_vel*s); // angle (rad) of y-axis rotation
+    var arx = Math.atan(this.prime_vel/s); // angle (rad) of x-axis rotation
 
     var g = 1/Math.sqrt(1-this.prime_vel*this.prime_vel); // lorentz factor
     var x = g*(e.x-this.prime_vel*e.y); // x' = g(x-vt)
     var y = g*(e.y-this.prime_vel*e.x); // t' = g(t-vx)
 
+    var ly = (this.yscale(0)-this.yscale(y));
+
+    var t_x2 = this.xscale(0)+ly*Math.sin(ary);
+    var t_y2 = this.yscale(0)-ly*Math.cos(ary);
+
+    var lx = (this.xscale(x)-this.xscale(0));
+
+    var x_x2 = this.xscale(0)+lx*Math.cos(arx);
+    var x_y2 = this.yscale(0)-lx*Math.sin(arx);
+    console.log("s:",s,"x':",x,"y':",y);
+    // console.log(x,y,",",this.xscale.invert(x2),this.yscale.invert(y2));
     this.construct_t
         .attr("x1",this.xscale(e.x))
         .attr("y1",this.yscale(e.y))
-        .attr("x2",this.xscale(-y*Math.sin(ary)))
-        .attr("y2",this.yscale(y*Math.cos(ary)))
+        .attr("x2",t_x2)
+        .attr("y2",t_y2)
         .attr("display","inline");
     this.construct_x
         .attr("x1",this.xscale(e.x))
         .attr("y1",this.yscale(e.y))
-        .attr("x2",this.xscale(x*Math.cos(arx)))
-        .attr("y2",this.yscale(-x*Math.sin(arx)))
+        .attr("x2",x_x2)
+        .attr("y2",x_y2)
+        .attr("display","inline");
+    this.construct_t_mark
+        .attr("cx",t_x2)
+        .attr("cy",t_y2)
+        .attr("display","inline");
+    this.construct_x_mark
+        .attr("cx",x_x2)
+        .attr("cy",x_y2)
         .attr("display","inline");
 };
 SpacetimeDiagram.prototype.user_AddParticle_Clicks = function(xb,tb,xd,td) {

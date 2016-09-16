@@ -51,3 +51,6 @@ svg{
     -moz-user-select: none;     /* Firefox all */
     -ms-user-select: none;      /* IE 10+ */
 }
+line,path,text{
+    pointer-events:none;
+}
