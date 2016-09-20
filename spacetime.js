@@ -17,7 +17,11 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,showcontro
     var that = this;
 
     this.div = div+" .st_diag"
-    d3.select(div).append("div").classed("st_diag",true).style("position","relative");
+    d3.select(div).append("div")
+        .classed("st_diag",true)
+        .style("position","relative")
+        .style("width",w+"px"); 
+
     this.tstep = 1;
     this.xmin = xmin;
     this.xmax = xmax;
@@ -37,11 +41,13 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,showcontro
     this.animating = false;
     this.waitframe = false; // for preventing overlapping animation calls.
     this.framelength = 100;
-    this.draw_worldlines = false;
-    this.draw_constructionlines = false;
+    this.draw_worldlines = true;
+    this.draw_constructionlines = true;
+    this.ui_addP;
+    this.ui_addE;
     // conventional d3 margin setup
     this.margin = {top: 20, right: 20, bottom: 50, left: 50};
-    this.ctrl = {h:showcontrols?200:0,w:w,oy:h-200};
+    this.ctrl = {h:showcontrols?h/10:0,w:w,oy:h-h/10};
     // this.ctrl = {h:0,w:w,oy:0}
     this.width = w - this.margin.left - this.margin.right;
     this.height = h - this.margin.top - this.margin.bottom - this.ctrl.h;
@@ -60,8 +66,11 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,showcontro
         .attr("transform",
         "translate(" + this.margin.left + "," + this.margin.top + ")");
 
-    d3.select(this.div).append("div")
-        .classed("buttons",true);
+    this.ctrldiv = d3.select(this.div).append("div").classed("st_controls",true)
+        .style("position","relative")
+        .style('border-style','solid')
+        .style('border-width','5px')
+        .style('border-radius','10px');
     
     // ---------- Set up axes ----------
 
@@ -176,74 +185,115 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,showcontro
         .style("display","none")
         .attr("r",this.event_marker_r);
 
-    this.construct_x = this.svg.append("line")
+    this.construct_g = this.svg.append("g");
+
+    this.construct_x = this.construct_g.append("line")
         .style("stroke","red")
         .style("stroke-dasharray","2,2");
-    this.construct_t = this.svg.append("line")
+    this.construct_t = this.construct_g.append("line")
         .style("stroke","blue")
         .style("stroke-dasharray","2,2");
 
-    this.construct_x_mark = this.svg.append("circle")
+    this.construct_x_mark = this.construct_g.append("circle")
         .style("fill","red")
         .style("r",3);
-    this.construct_t_mark = this.svg.append("circle")
+    this.construct_t_mark = this.construct_g.append("circle")
         .style("fill","blue")
         .style("r",3);
 
     this.play_sld;
-    if(showcontrols) this.buildControlUI();
+    
+    this.buildPlayUI();
+    this.buildMenus();
+    this.buildControls();
 
     this.updatePrimeAxes(0);
 };
-SpacetimeDiagram.prototype.buildControlUI = function() {
+SpacetimeDiagram.prototype.buildControls = function(first_argument) {
+    
+    var that = this;
+    var row;
+    var td;
+    var table=this.ctrldiv.append("table")
+        .style("width","100%")
+        .style("font-size","20px")
+
+    row = table.append("tr");
+    row.append("th").attr("colspan",3).html("Controls")
+        .style("border-bottom","1pt solid black");
+    
+    row = table.append("tr"); // Checkbox row
+    td = row.append("td");
+    td.append("input").attr("type","checkbox").property("checked",true)
+        .on("change",function() {
+            if (d3.select(this).property("checked")){
+                that.draw_worldlines = true;
+            }else{
+                that.draw_worldlines = false;
+            }
+        });
+    td.append("span").html(" Draw Worldlines");
+
+    td = row.append("td");
+    td.append("input").attr("type","checkbox").property("checked",true)
+        .on("change",function() {
+            if (d3.select(this).property("checked")){
+                that.draw_constructionlines = true;
+            }else{
+                that.draw_constructionlines = false;
+            }
+        });
+    td.append("span").html(" Prime-frame lines");
+
+    td = row.append("td");
+    td.append("input").attr("type","checkbox").property("checked",true)
+        .on("change",function() {
+            if (d3.select(this).property("checked")){
+                that.gridline_g.attr("display","inline");
+            }else{
+                that.gridline_g.attr("display","none");
+            }
+        });
+    td.append("span").html(" Gridlines");
+
+    row = table.append("tr"); // Checkbox row
+    td = row.append("td");
+    td.append("input").attr("type","button").attr("value","Add Particle")
+        .on("click",function() {
+            if (that.ui_addP.style("display")!=="none"){
+                that.ui_addP.style("display","none");
+            } else{
+                that.ui_addP.style("display","inline");
+            }
+
+        });
+    td = row.append("td");
+    td.append("input").attr("type","button").attr("value","Remove Particle/Event")
+        .on("click",function() {
+            that.removeSelected();
+        });
+    td = row.append("td");
+    td.append("input").attr("type","button").attr("value","Add Event")
+        .on("click",function() {
+            if (that.ui_addE.style("display")!=="none"){
+                that.ui_addE.style("display","none");
+            } else{
+                that.ui_addE.style("display","inline");
+            }
+
+        });
+};
+SpacetimeDiagram.prototype.buildPlayUI = function() {
     var oy = this.ctrl.oy; // "origin" of the UI (top left)
     var h = this.ctrl.h; // height of the UI
     var w = this.ctrl.w; // width of the UI
-    var n = 6; // number of "rows"
+    var n = 2; // number of "rows"
     var rh = h/n;
     // group all the UI stuff together
     var g = d3.select(this.div+" svg").append("g");
 
     var st = this;
 
-    var checkbox = function(x,y,h,on_func,off_func,start_on) {
-        this.on = start_on;
-        this.on_func = on_func;
-        this.off_func = off_func;
-
-        var that = this;
-        var s = 3;
-
-        g.append("rect")
-            .attr("x",x)
-            .attr("y",y)
-            .attr("height",h)
-            .attr("width",h)
-            .style("fill","none")
-            .style("stroke","black")
-            .style("stroke-width","2");
-
-        var colorbox = g.append("rect")
-            .attr("x",x+s)
-            .attr("y",y+s)
-            .attr("height",h-2*s)
-            .attr("width",h-2*s)
-            .style("fill",start_on?"green":"red")
-            .style("stroke","none")
-            .on("click",function(){
-                if(that.on){
-                    off_func();
-                    colorbox.style("fill","red");
-                }
-                else{
-                    on_func();
-                    colorbox.style("fill","green");
-                }
-                that.on=!that.on;
-            });
-
-        return this;
-    };
     var button = function(x,y,w,h,color,on_click) {
         g.append("rect")
             .attr("x",x)
@@ -304,242 +354,192 @@ SpacetimeDiagram.prototype.buildControlUI = function() {
         this.value = v;
         if(update) this.update(v);
     };
-    for (var i=0; i<n; i++){
-        var roy = oy+rh*i // row origin (top left)
-        g.append("line") // dividing line
-            .attr("x1",0)
-            .attr("y1",roy)
-            .attr("x2",w)
-            .attr("y2",roy)
-            .style("stroke","black");
+    var play_w = 20;
+    this.play_sld = new slider((play_w+10),oy,w-(play_w+10)*2,rh,st.ymin
+        ,st.ymax,0,st.tstep,
+        function(v) {
+            st.changeTime(this.value,true);
+        });
+    new button(0,oy,play_w,rh,"orange",
+        function() {
+            st.animating = !st.animating;
+            st.animate();
+        });
+    new button(w-play_w,oy,play_w,rh/2,"green",
+        function() {
+            st.changeTime(st.t+st.tstep);
+        });
+    new button(w-play_w,oy+rh/2,play_w,rh/2,"red",
+        function() {
+            st.changeTime(st.t-st.tstep);
+        });
 
-        switch(i){
-            case 0: // play bar
-                var play_w = 20;
-                this.play_sld = new slider((play_w+10),roy,w-(play_w+10)*2,rh,st.ymin
-                    ,st.ymax,0,st.tstep,function(v) {
-                        st.changeTime(this.value,true);
-                    });
-                new button(0,roy,play_w,rh,"orange",
-                    function() {
-                        st.animating = !st.animating;
-                        st.animate();
-                    });
-                new button(w-play_w,roy,play_w,rh/2,"green",
-                    function() {
-                        st.changeTime(st.t+st.tstep);
-                    });
-                new button(w-play_w,roy+rh/2,play_w,rh/2,"red",
-                    function() {
-                        st.changeTime(st.t-st.tstep);
-                    });
-                break;
-            
-            case 1: // prime frame options
-                this.prime_sld = new slider(w/4,roy+rh/4,w/2,rh/2,-1
-                    ,1,st.prime_vel,0.01,function(v){
-                        st.updatePrimeAxes(v);
-                    });
-                new button(13*w/16,roy+rh/4,w/8,rh/2,"steelblue",
-                    function() {
-                        st.transformFrame(st.prime_vel);
-                    });
-                break;
-            
-            case 2: // play options
-                break;
-            
-            case 3: // some checkboxes
-                var cbh = 20;
-                new checkbox(10,roy+(rh-cbh)/2,cbh,
-                    function() {
-                        st.draw_worldlines = true;
-                    },
-                    function() {
-                        st.draw_worldlines = false;
-                    },st.draw_worldlines);
-                new checkbox(60,roy+(rh-cbh)/2,cbh,
-                    function() {
-                        st.draw_constructionlines = true;
-                    },
-                    function() {
-                        st.draw_constructionlines = false;
-                    },st.draw_worldlines);
-                new checkbox(100,roy+(rh-cbh)/2,cbh,
-                    function() {st.gridline_g.attr("display","inline");},
-                    function() {st.gridline_g.attr("display","none");}
-                    ,false);
-                break;
+     // prime frame options
+     this.prime_sld = new slider(w/4,(oy+rh)+rh/4,w/2,rh/2,-1
+         ,1,st.prime_vel,0.01,function(v){
+             st.updatePrimeAxes(v);
+         });
+     new button(13*w/16,(oy+rh)+rh/4,w/8,rh/2,"steelblue",
+         function() {
+             st.transformFrame(st.prime_vel);
+         });
+};
+SpacetimeDiagram.prototype.buildMenus = function() {
+    // Create visuals for adding particles
+    var that = this;
+    this.ui_addP = d3.select(this.div)
+        .append("div").append("form")
+        .attr("action","#")
+        .style('position','absolute')
+        .style('padding','10px 10px 10px 10px')
+        .style('background','orange')
+        .style('border-style','solid')
+        .style('border-width','5px')
+        .style('border-radius','20px')
+        .style('left',10+'px')
+        .style('top',10+'px')
+        .style("width","40%")
+        .style("display","none");
 
-            case 4: // some checkboxes
+    var table=this.ui_addP.append("table")
+        .style("width","100%")
+        .style("font-size","20px");
 
-                break;
-            
-            case 5: // add particles
-                var bw = 200;
-                var bh = 20;
+    var row = table.append("tr");
+    var inputs_addP = [];
+    row.append("th").attr("colspan",2).html("<b>ADD PARTICLE</b>")
+        .style("border-bottom","1pt solid black");
 
-                // Create visuals for adding particles
+    row = table.append("tr");
+    row.append("th").attr("colspan",2).html("You can press tab to move between fields")
+        .style("font-style","italic")
+        .style("font-size","14px")
+        
+    row = table.append("tr");
+    row.append("td").append("span").html("Name:")
+    inputs_addP.push( row.append("td").append("input").attr("type","text").attr("value",""));
 
-                var box_addP = d3.select(this.div)
-                    .append("div").append("form")
-                    .attr("action","#")
-                    .style('position','absolute')
-                    .style('padding','10px 10px 10px 10px')
-                    .style('background','orange')
-                    .style('border-style','solid')
-                    .style('border-width','5px')
-                    .style('border-radius','20px')
-                    .style('left',10+'px')
-                    .style('top',10+'px')
-                    .style("width","40%")
-                    .style("display","none");
+    row = table.append("tr");
+    row.append("th").attr("colspan",2).html("&nbsp");
 
-                var table=box_addP.append("table")
-                    .style("width","100%")
-                    .style("font-size","20px");
+    row = table.append("tr");
+    row.append("td").append("span").html("Starting x:");
+    inputs_addP.push(row.append("td").append("input").attr("type","number").attr("value",0));
 
-                var row = table.append("tr");
-                var inputs_addP = [];
-                row.append("th").attr("colspan",2).html("<b>ADD PARTICLE</b>")
-                    .style("border-bottom","1pt solid black");
+    row = table.append("tr");
+    row.append("td").append("span").html("Starting ct:");
+    inputs_addP.push(row.append("td").append("input").attr("type","number").attr("value",0));
 
-                row = table.append("tr");
-                row.append("th").attr("colspan",2).html("You can press tab to move between fields")
-                    .style("font-style","italic")
-                    .style("font-size","14px")
-                    
-                row = table.append("tr");
-                row.append("td").append("span").html("Name:")
-                inputs_addP.push( row.append("td").append("input").attr("type","text").attr("value",""));
+    row = table.append("tr");
+    row.append("th").attr("colspan",2).html("&nbsp");
 
-                row = table.append("tr");
-                row.append("th").attr("colspan",2).html("&nbsp");
+    row = table.append("tr");
+    row.append("td").append("span").html("Velocity:");
+    inputs_addP.push(row.append("td").append("input").attr("type","number").attr("value",0)
+        .attr("min",-1).attr("max",1));
 
-                row = table.append("tr");
-                row.append("td").append("span").html("Starting x:");
-                inputs_addP.push(row.append("td").append("input").attr("type","number").attr("value",0));
+    row = table.append("tr");
+    row.append("th").attr("colspan",2).html("&nbsp");
 
-                row = table.append("tr");
-                row.append("td").append("span").html("Starting ct:");
-                inputs_addP.push(row.append("td").append("input").attr("type","number").attr("value",0));
+    row = table.append("tr");
+    row.append("td").append("span").html("Lifetime:");
+    inputs_addP.push(row.append("td").append("input").attr("type","number").attr("value",this.ymax)
+        .attr("min",0));
 
-                row = table.append("tr");
-                row.append("th").attr("colspan",2).html("&nbsp");
+    row = table.append("tr");
+    row.append("td").append("span").html("Always exist:");
+    inputs_addP.push(row.append("td").append("input").attr("type","checkbox").property("checked",false));
 
-                row = table.append("tr");
-                row.append("td").append("span").html("Velocity:");
-                inputs_addP.push(row.append("td").append("input").attr("type","number").attr("value",0)
-                    .attr("min",-1).attr("max",1));
+    row = table.append("tr");
+    var addP_statustxt = row.append("th").attr("colspan",2);
+    row = table.append("tr");
+    var th = row.append("th").attr("colspan",2)
+    th.append("input").attr("type","button").attr("value"," ADD ")
+        .on("click",function() {
+            if(Math.abs(parseFloat(inputs_addP[3].property("value")))>1){
+                addP_statustxt.html("Invalid velocity");
+                return;
+            }
+            else if (parseFloat(inputs_addP[4].property("value"))<0){
+                addP_statustxt.html("Invalid lifetime");
+                return;
+            }
+            addP_statustxt.html("");
+            that.addParticle(
+                parseFloat(inputs_addP[1].property("value")),
+                parseFloat(inputs_addP[2].property("value")),
+                parseFloat(inputs_addP[3].property("value")),
+                inputs_addP[5].property("checked"),
+                parseFloat(inputs_addP[4].property("value")) ,
+                inputs_addP[0].property("value")
+            );
+            that.ui_addP.style("display","none");
+        });
+    th.append("input").attr("type","button").attr("value","CANCEL")
+        .on("click",function() {
+            that.ui_addP.style("display","none");
+        })
+    // Create visuals for adding events
 
-                row = table.append("tr");
-                row.append("th").attr("colspan",2).html("&nbsp");
+    this.ui_addE = d3.select(this.div)
+        .append("div").append("form")
+        .attr("action","#")
+        .style('position','absolute')
+        .style('padding','10px 10px 10px 10px')
+        .style('background','pink')
+        .style('border-style','solid')
+        .style('border-width','5px')
+        .style('border-radius','20px')
+        .style('left',10+'px')
+        .style('top',10+'px')
+        .style("width","40%")
+        .style("display","none");
 
-                row = table.append("tr");
-                row.append("td").append("span").html("Lifetime:");
-                inputs_addP.push(row.append("td").append("input").attr("type","number").attr("value",this.ymax)
-                    .attr("min",0));
+    table=this.ui_addE.append("table")
+        .style("width","100%")
+        .style("font-size","20px");
 
-                row = table.append("tr");
-                row.append("td").append("span").html("Always exist:");
-                inputs_addP.push(row.append("td").append("input").attr("type","checkbox").property("checked",false));
+    row = table.append("tr");
+    var inputs_addE = [];
+    
+    row.append("th").attr("colspan",2).html("ADD EVENT")
+        .style("border-bottom","1pt solid black");
 
-                row = table.append("tr");
-                var addP_statustxt = row.append("th").attr("colspan",2);
-                row = table.append("tr");
-                row.append("th").attr("colspan",2).append("input").attr("type","button").attr("value","ADD")
-                    .on("click",function() {
-                        if(Math.abs(parseFloat(inputs_addP[3].property("value")))>1){
-                            addP_statustxt.html("Invalid velocity");
-                            return;
-                        }
-                        else if (parseFloat(inputs_addP[4].property("value"))<0){
-                            addP_statustxt.html("Invalid lifetime");
-                            return;
-                        }
-                        addP_statustxt.html("");
-                        st.addParticle(
-                            parseFloat(inputs_addP[1].property("value")),
-                            parseFloat(inputs_addP[2].property("value")),
-                            parseFloat(inputs_addP[3].property("value")),
-                            inputs_addP[5].property("checked"),
-                            parseFloat(inputs_addP[4].property("value")) ,
-                            inputs_addP[0].property("value")
-                        );
-                        box_addP.style("display","none");
-                    });
-               
-               // Create visuals for adding events
+    row = table.append("tr");
+    row.append("th").attr("colspan",2).html("You can press tab to move between fields")
+        .style("font-style","italic")
+        .style("font-size","14px")
 
-                var box_addE = d3.select(this.div)
-                    .append("div").append("form")
-                    .attr("action","#")
-                    .style('position','absolute')
-                    .style('padding','10px 10px 10px 10px')
-                    .style('background','pink')
-                    .style('border-style','solid')
-                    .style('border-width','5px')
-                    .style('border-radius','20px')
-                    .style('left',10+'px')
-                    .style('top',10+'px')
-                    .style("width","40%")
-                    .style("display","none");
+    row = table.append("tr");
+    row.append("td").append("span").html("Name:")
+    inputs_addE.push( row.append("td").append("input").attr("type","text").attr("value",""));
 
-                table=box_addE.append("table")
-                    .style("width","100%")
-                    .style("font-size","20px");
+    row = table.append("tr");
+    row.append("th").attr("colspan",2).html("&nbsp");
 
-                row = table.append("tr");
-                var inputs_addE = [];
-                
-                row.append("th").attr("colspan",2).html("ADD EVENT")
-                    .style("border-bottom","1pt solid black");
+    row = table.append("tr");
+    row.append("td").append("span").html("x:");
+    inputs_addE.push(row.append("td").append("input").attr("type","number").attr("value",0));
 
-                row = table.append("tr");
-                row.append("th").attr("colspan",2).html("You can press tab to move between fields")
-                    .style("font-style","italic")
-                    .style("font-size","14px")
+    row = table.append("tr");
+    row.append("td").append("span").html("ct:");
+    inputs_addE.push(row.append("td").append("input").attr("type","number").attr("value",0));
 
-                row = table.append("tr");
-                row.append("td").append("span").html("Name:")
-                inputs_addE.push( row.append("td").append("input").attr("type","text").attr("value",""));
-
-                row = table.append("tr");
-                row.append("th").attr("colspan",2).html("&nbsp");
-
-                row = table.append("tr");
-                row.append("td").append("span").html("x:");
-                inputs_addE.push(row.append("td").append("input").attr("type","number").attr("value",0));
-
-                row = table.append("tr");
-                row.append("td").append("span").html("ct:");
-                inputs_addE.push(row.append("td").append("input").attr("type","number").attr("value",0));
-
-                row = table.append("tr");
-                row.append("th").attr("colspan",2).append("input").attr("type","button").attr("value","ADD")
-                    .on("click",function() {
-                        st.addEvent(
-                            parseFloat(inputs_addE[1].property("value")),
-                            parseFloat(inputs_addE[2].property("value")),
-                            inputs_addE[0].property("value")
-                        );
-                        box_addE.style("display","none");
-                    });
-
-                new button(10,roy+(rh-bh)/2,bw,bh,
-                    "required",function() {
-                        box_addP.style("display","inline");
-                        box_addE.style("display","none");
-                    });
-                new button(10+bw+10,roy+(rh-bh)/2,bw,bh,
-                    "blue",function() {
-                        box_addP.style("display","none");
-                        box_addE.style("display","inline");
-                });
-                break;
-            
-        }
-    }
+    row = table.append("tr");
+    th = row.append("th").attr("colspan",2)
+    th.append("input").attr("type","button").attr("value","ADD")
+        .on("click",function() {
+            that.addEvent(
+                parseFloat(inputs_addE[1].property("value")),
+                parseFloat(inputs_addE[2].property("value")),
+                inputs_addE[0].property("value")
+            );
+            that.ui_addE.style("display","none");
+        });
+    th.append("input").attr("type","button").attr("value","CANCEL")
+        .on("click",function() {
+            that.ui_addE.style("display","none");
+        })
 };
 SpacetimeDiagram.prototype.updatePrimeAxes = function(v) {
     // Handles of rotation of prime axes, relative velocity of new frame
@@ -632,6 +632,25 @@ SpacetimeDiagram.prototype.setMode = function(newmode) {
     d3.select(this.div).select("svg").on("mousemove",move);
     this._mode = newmode;
 };
+SpacetimeDiagram.prototype.removeSelected = function(first_argument) {
+    if (!this.eventselected || typeof this.selectedIndex!== "number") return;
+    var data = [];
+    var r = this._data[this.selectedIndex];
+
+    if (r.type==="particle") this.particlecount--;
+
+    for(var i=0; i<this._data.length; i++){
+        var d = this._data[i];
+        //remove birth event
+        if(i===this.selectedIndex-2 && !r.omni) continue;
+        //remove death event
+        else if(i===this.selectedIndex-1 && !r.omni && r.lt<Infinity) continue;
+        else if(i===this.selectedIndex) continue;
+        data.push([d.xi,d.yi,d.vx,d.lt,d.type,d.color,d.desc,d.omni]);
+    }
+    this.eventselected = false;
+    this._updateEvents(data,true);
+};
 SpacetimeDiagram.prototype._updateEvents = function(arr,cleardata) {
     // ...
     // cleardata: are we overwriting any data?
@@ -665,15 +684,16 @@ SpacetimeDiagram.prototype._updateEvents = function(arr,cleardata) {
             this._data_particle.push(d);
         }
     }
-
     // Following D3 general update pattern
     // Data Join
     var events = this.eventsgroup.selectAll("circle").data(this._data);
     var worldlines = this.eventsgroup.selectAll("line").data(this._data_particle);
+    
     // Update any existing data
     events
         .attr("cx",function(d,i){return that.xscale(d.x);})
         .attr("cy",function(d,i){return that.yscale(d.y);})
+
         .style("stroke-width",2)
         .style("stroke-dasharray",function(d){
             if (d.type==="birth" || d.type==="death") return "2,2";
@@ -715,7 +735,7 @@ SpacetimeDiagram.prototype._updateEvents = function(arr,cleardata) {
         .style("opacity",0.5);
     worldlines
         .attr("x1",function(d) {
-            return d.omni?that.xscale(d.xi-d.vx*d.yi):that.xscale(d.xi);
+            return d.omni?that.xscale(d.xi+d.vx*(that.ymin-d.yi)):that.xscale(d.xi);
         })
         .attr("y1",function(d) {
             return d.omni?that.yscale(that.ymin):that.yscale(d.yi);
@@ -730,6 +750,7 @@ SpacetimeDiagram.prototype._updateEvents = function(arr,cleardata) {
         .style("display",this.draw_worldlines?"inline":"none");
     // Remove any no longer present data
     events.exit().remove();
+    worldlines.exit().remove();
 };
 SpacetimeDiagram.prototype.updateSelection = function(element,i) {
     // element: svg element representing the event
@@ -757,55 +778,40 @@ SpacetimeDiagram.prototype.updateSelection = function(element,i) {
 SpacetimeDiagram.prototype.updateConstructionLines = function() {
     // if enabled...
     if(!this.eventselected||!this.draw_constructionlines || Math.abs(this.prime_vel)>=1){
-        this.construct_t.attr("display","none");
-        this.construct_x.attr("display","none");
-        this.construct_t_mark.attr("display","none");
-        this.construct_x_mark.attr("display","none");
+        this.construct_g.attr("display","none");
         return;
     } 
     //(this.ymax-this.ymin)/((this.xmax-this.xmin))
     var e = this._data[this.selectedIndex];
-    var s = this.angle_scale;
-    //*(this.height/this.width);
-    // s = 1;
-    var ary = Math.atan(this.prime_vel*s); // angle (rad) of y-axis rotation
-    var arx = Math.atan(this.prime_vel/s); // angle (rad) of x-axis rotation
+
+    var ary = Math.atan(this.prime_vel*this.angle_scale); // angle (rad) of y-axis rotation
+    var arx = Math.atan(this.prime_vel/this.angle_scale); // angle (rad) of x-axis rotation
 
     var g = 1/Math.sqrt(1-this.prime_vel*this.prime_vel); // lorentz factor
     var x = g*(e.x-this.prime_vel*e.y); // x' = g(x-vt)
     var y = g*(e.y-this.prime_vel*e.x); // t' = g(t-vx)
 
     var ly = (this.yscale(0)-this.yscale(y));
-
-    var t_x2 = this.xscale(0)+ly*Math.sin(ary);
-    var t_y2 = this.yscale(0)-ly*Math.cos(ary);
-
     var lx = (this.xscale(x)-this.xscale(0));
 
-    var x_x2 = this.xscale(0)+lx*Math.cos(arx);
-    var x_y2 = this.yscale(0)-lx*Math.sin(arx);
-    console.log("s:",s,"x':",x,"y':",y);
-    // console.log(x,y,",",this.xscale.invert(x2),this.yscale.invert(y2));
     this.construct_t
         .attr("x1",this.xscale(e.x))
         .attr("y1",this.yscale(e.y))
-        .attr("x2",t_x2)
-        .attr("y2",t_y2)
-        .attr("display","inline");
+        .attr("x2",this.xscale(0)+ly*Math.sin(ary))
+        .attr("y2",this.yscale(0)-ly*Math.cos(ary));
     this.construct_x
         .attr("x1",this.xscale(e.x))
         .attr("y1",this.yscale(e.y))
-        .attr("x2",x_x2)
-        .attr("y2",x_y2)
-        .attr("display","inline");
+        .attr("x2",this.xscale(0)+lx*Math.cos(arx))
+        .attr("y2",this.yscale(0)-lx*Math.sin(arx));
     this.construct_t_mark
-        .attr("cx",t_x2)
-        .attr("cy",t_y2)
-        .attr("display","inline");
+        .attr("cx",this.xscale(0)+ly*Math.sin(ary))
+        .attr("cy",this.yscale(0)-ly*Math.cos(ary));
     this.construct_x_mark
-        .attr("cx",x_x2)
-        .attr("cy",x_y2)
-        .attr("display","inline");
+        .attr("cx",this.xscale(0)+lx*Math.cos(arx))
+        .attr("cy",this.yscale(0)-lx*Math.sin(arx));
+
+    this.construct_g.attr("display","inline");
 };
 SpacetimeDiagram.prototype.user_AddParticle_Clicks = function(xb,tb,xd,td) {
 
