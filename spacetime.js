@@ -1,19 +1,14 @@
 "use strict"
-var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,showcontrols) {
+var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
     // SVG diagram displaying ct against x
     // div is the html element id (#string) to which the svg is appended
     // xmax(ymax): max value for x(y) domain.
     // There should never be more than one SpacetimeDiagram per div!
 
     if(typeof newtonian === "undefined") newtonian = false;
-    if(typeof showcontrols === "undefined") showcontrols = false;
     if(xmin>0 || xmax<0 || ymin>0 || ymax<0){
         throw("Currently, rotations cannot be displayed without a 0,0 origin")
     }
-
-    showcontrols = true; //currently do not support not showing controls
-
-
     var that = this;
 
     this.div = div+" .st_diag"
@@ -47,8 +42,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,showcontro
     this.ui_addE;
     // conventional d3 margin setup
     this.margin = {top: 20, right: 20, bottom: 50, left: 50};
-    this.ctrl = {h:showcontrols?h/10:0,w:w,oy:h-h/10};
-    // this.ctrl = {h:0,w:w,oy:0}
+    this.ctrl = {h:h/10,w:w,oy:h-h/10};
     this.width = w - this.margin.left - this.margin.right;
     this.height = h - this.margin.top - this.margin.bottom - this.ctrl.h;
     this.angle_scale = (this.ymax-this.ymin)/((this.xmax-this.xmin))
@@ -84,26 +78,26 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,showcontro
         .range([0,this.width]);
 
     // set up gridlines (draw first so that they are behind everything)
-    this.gridline_g = this.svg.append("g").attr("display","none");
+    this.gridline_g = this.svg.append("g");
 
-    for(var x=this.xmin; x<=this.xmax; x+=this.xmax/20){
+    for(var x=this.xmin; x<=this.xmax; x++){
         this.gridline_g.append("line")
             .attr("x1",this.xscale(x))
             .attr("y1",this.yscale(this.ymin))
             .attr("x2",this.xscale(x))
             .attr("y2",this.yscale(this.ymax))
             .style("stroke","blue")
-            .style("opacity",x%(this.xmax/4)!==0?"0.2":"0.8")
+            .style("opacity",0.2)
             .style("stroke-width","1px");
     }
-    for(var y=this.ymin; y<=this.ymax; y+=this.ymax/20){
+    for(var y=this.ymin; y<=this.ymax; y++){
         this.gridline_g.append("line")
             .attr("x1",this.xscale(this.xmin))
             .attr("y1",this.yscale(y))
             .attr("x2",this.xscale(this.xmax))
             .attr("y2",this.yscale(y))
             .style("stroke","blue")
-            .style("opacity",y%(this.ymax/4)!==0?"0.2":"0.8")
+            .style("opacity",0.2)
             .style("stroke-width","1px");
     }
 
@@ -151,14 +145,15 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,showcontro
 
     this.hovertext = this.svg.append("text");
 
-    this.svg.append("line") // light-like line seperating space-like and time-like
+    this.lightline_g = this.svg.append("g");
+    this.lightline_g.append("line") // light-like line seperating space-like and time-like
         .attr("x1",this.xscale(ymin))
         .attr("y1",this.yscale(ymin))
         .attr("x2",this.xscale(ymax))
         .attr("y2",this.yscale(ymax))
         .style("stroke","black")
         .style("stroke-dasharray","3,3");
-    this.svg.append("line") // light-like line seperating space-like and time-like
+    this.lightline_g.append("line") // light-like line seperating space-like and time-like
         .attr("x1",this.xscale(-ymin))
         .attr("y1",this.yscale(ymin))
         .attr("x2",this.xscale(-ymax))
@@ -231,7 +226,7 @@ SpacetimeDiagram.prototype.buildControls = function(first_argument) {
             }else{
                 that.draw_worldlines = false;
             }
-        });
+        }); 
     td.append("span").html(" Draw Worldlines");
 
     td = row.append("td");
@@ -255,8 +250,20 @@ SpacetimeDiagram.prototype.buildControls = function(first_argument) {
             }
         });
     td.append("span").html(" Gridlines");
+    
+    row = table.append("tr"); // Checkbox row 2
+    td = row.append("td");
+    td.append("input").attr("type","checkbox").property("checked",true)
+        .on("change",function() {
+            if (d3.select(this).property("checked")){
+                that.lightline_g.attr("display","inline");
+            }else{
+                that.lightline_g.attr("display","none");
+            }
+        });
+    td.append("span").html("Light-line");
 
-    row = table.append("tr"); // Checkbox row
+    row = table.append("tr"); // Add/Remove Controls
     td = row.append("td");
     td.append("input").attr("type","button").attr("value","Add Particle")
         .on("click",function() {
@@ -291,7 +298,6 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
     var rh = h/n;
     // group all the UI stuff together
     var g = d3.select(this.div+" svg").append("g");
-
     var st = this;
 
     var button = function(x,y,w,h,color,on_click) {
@@ -329,31 +335,66 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
             .on("click",function() {
                 that.moveSlider(d3.mouse(this)[0],true);
             });
+
+
+        this.prog_pos = g.append("rect")
+            .attr("x",this.v2x(0))
+            .attr("y",y)
+            .attr("height",h)
+            .attr("width",this.v2x(max)-this.v2x(0))
+            .style("fill","green")
+            .style("pointer-events","none");
+
+        this.prog_neg = g.append("rect")
+            .attr("x",this.v2x(min))
+            .attr("y",y)
+            .attr("height",h)
+            .attr("width",this.v2x(0)-this.v2x(min))
+            .style("fill","red")
+            .style("pointer-events","none");
+
         this.circle = g.append("circle")
-            .attr("r",h/2.5)
+            .attr("r",h/5)
             .attr("cy",y+h/2)
-            .style("pointer-events","none")
-            .style("fill","blue");
+            .style("pointer-events","none").attr("display","none")
+            .style("fill","black");
 
         this.setValue(initial,false);
     };
     slider.prototype.moveSlider = function(x,update) {
         // update the slider such that cx = x
         // if update===true then run update function
-        this.circle.attr("cx",x);
         this.value = this.vstep*Math.floor(this.v2x.invert(x)/this.vstep);
-        if(update) this.update(this.value);
+        this.setValue(this.value,update);
     };
     slider.prototype.setValue = function(v,update) {
         // update the slider to have a value v
         // if update===true then run update function
+        
         if(v>this.max) v = this.max;
         else if (v<this.min) v = this.min;
+
         v = this.vstep*Math.floor(v/this.vstep); // round to the nearest step
-        this.circle.attr("cx",this.v2x(v));
+        if(v>=0){
+            this.prog_neg.attr("width",0)
+            this.prog_pos.attr("width",this.v2x(v)-this.v2x(0));
+        }else{
+            this.prog_neg
+                .attr("x",this.v2x(v))
+                .attr("width",this.v2x(0)-this.v2x(v))
+            this.prog_pos.attr("width",0);
+        }
         this.value = v;
         if(update) this.update(v);
     };
+
+    g.append("rect")
+        .attr("x",0)
+        .attr("y",oy)
+        .attr("width",w)
+        .attr("height",h)
+        .style("fill","black")
+
     var play_w = 20;
     this.play_sld = new slider((play_w+10),oy,w-(play_w+10)*2,rh,st.ymin
         ,st.ymax,0,st.tstep,
@@ -373,16 +414,15 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
         function() {
             st.changeTime(st.t-st.tstep);
         });
-
-     // prime frame options
-     this.prime_sld = new slider(w/4,(oy+rh)+rh/4,w/2,rh/2,-1
-         ,1,st.prime_vel,0.01,function(v){
-             st.updatePrimeAxes(v);
-         });
-     new button(13*w/16,(oy+rh)+rh/4,w/8,rh/2,"steelblue",
-         function() {
-             st.transformFrame(st.prime_vel);
-         });
+    // prime frame options
+    this.prime_sld = new slider(w/4,(oy+rh)+rh/4,w/2,rh/2,-1
+        ,1,st.prime_vel,0.01,function(v){
+            st.updatePrimeAxes(v);
+        });
+    new button(13*w/16,(oy+rh)+rh/4,w/8,rh/2,"steelblue",
+        function() {
+            st.transformFrame(st.prime_vel);
+        });
 };
 SpacetimeDiagram.prototype.buildMenus = function() {
     // Create visuals for adding particles
@@ -731,7 +771,7 @@ SpacetimeDiagram.prototype._updateEvents = function(arr,cleardata) {
         .attr("cx",function(d){return that.xscale(d.x);})
         .attr("cy",function(d){return that.yscale(d.y);})
     worldlines.enter().append("line")
-        .style("stroke",function(d) {return "black"})
+        .style("stroke",function(d) {return d.color;})
         .style("opacity",0.5);
     worldlines
         .attr("x1",function(d) {
@@ -831,7 +871,7 @@ SpacetimeDiagram.prototype.addParticle = function(xb,tb,u,omni,lt,desc,color) {
     var ptype;
 
     if (u===1 || u===-1) ptype = "light"; 
-    else ptype = "particle"; 
+    else {ptype = "particle"; this.particlecount++;}
     
     if (typeof color === "undefined"){
         if (ptype === "particle"){
@@ -843,7 +883,6 @@ SpacetimeDiagram.prototype.addParticle = function(xb,tb,u,omni,lt,desc,color) {
             color = "#ffcc00";
         }
     }
-    
     var new_events = [];
 
     if(!omni){

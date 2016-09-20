@@ -13,7 +13,7 @@ ex2.addParticle(0,0,0.9,true,Infinity,"rodLeft","grey");
 ex2.addParticle(10,0,0.9,true,Infinity,"rodRight","grey");
 ex2.changeTime(0);
 //asteroid warning
-var ex3 = new SpacetimeDiagram("#ex3",0,30,0,25,width,width,false);
+var ex3 = new SpacetimeDiagram("#ex3",0,25,0,25,width,width,false);
 ex3.tstep=0.5;
 ex3.addParticle(5,0,0,false,10,"spaceship1","blue");
 ex3.addParticle(10,0,0,false,15,"spaceship2_Slow","red");
