@@ -11,13 +11,13 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,showcontro
         throw("Currently, rotations cannot be displayed without a 0,0 origin")
     }
 
+    showcontrols = true; //currently do not support not showing controls
 
 
     var that = this;
 
     this.div = div+" .st_diag"
-    d3.select(div).append("div").classed("st_diag",true);
- d3.select(this.div).style("position","relative")
+    d3.select(div).append("div").classed("st_diag",true).style("position","relative");
     this.tstep = 1;
     this.xmin = xmin;
     this.xmax = xmax;
@@ -42,11 +42,11 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,showcontro
     // conventional d3 margin setup
     this.margin = {top: 20, right: 20, bottom: 50, left: 50};
     this.ctrl = {h:showcontrols?200:0,w:w,oy:h-200};
+    // this.ctrl = {h:0,w:w,oy:0}
     this.width = w - this.margin.left - this.margin.right;
     this.height = h - this.margin.top - this.margin.bottom - this.ctrl.h;
     this.angle_scale = (this.ymax-this.ymin)/((this.xmax-this.xmin))
         *this.width/this.height; // for dealing with rotations.
-
     this.particlecount = 0;
     this.colors = ["red","orange","green","blue","cyan"];
     // 
@@ -64,7 +64,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,showcontro
         .classed("buttons",true);
     
     // ---------- Set up axes ----------
-    
+
     // scaling functions
     this.yscale = d3.scaleLinear()
         .domain([ymin,ymax])
@@ -74,10 +74,34 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,showcontro
         .domain([xmin,xmax])
         .range([0,this.width]);
 
+    // set up gridlines (draw first so that they are behind everything)
+    this.gridline_g = this.svg.append("g").attr("display","none");
+
+    for(var x=this.xmin; x<=this.xmax; x+=this.xmax/20){
+        this.gridline_g.append("line")
+            .attr("x1",this.xscale(x))
+            .attr("y1",this.yscale(this.ymin))
+            .attr("x2",this.xscale(x))
+            .attr("y2",this.yscale(this.ymax))
+            .style("stroke","blue")
+            .style("opacity",x%(this.xmax/4)!==0?"0.2":"0.8")
+            .style("stroke-width","1px");
+    }
+    for(var y=this.ymin; y<=this.ymax; y+=this.ymax/20){
+        this.gridline_g.append("line")
+            .attr("x1",this.xscale(this.xmin))
+            .attr("y1",this.yscale(y))
+            .attr("x2",this.xscale(this.xmax))
+            .attr("y2",this.yscale(y))
+            .style("stroke","blue")
+            .style("opacity",y%(this.ymax/4)!==0?"0.2":"0.8")
+            .style("stroke-width","1px");
+    }
+
     // add x axis
     this.svg.append("g")
         .attr("transform", "translate(0," + this.yscale(0) + ")")
-        .call(d3.axisBottom(this.xscale));
+        .call(d3.axisBottom(this.xscale))
 
     this.svg.append("text")
         .attr("transform",
@@ -88,7 +112,8 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,showcontro
 
     // add y axis
     this.svg.append("g")
-        .call(d3.axisLeft(this.yscale))
+        .call(d3.axisLeft(this.yscale)
+            .ticks(this.ymin,this.ymax,3))
         .attr("transform","translate("+this.xscale(0)+",0)");
     this.svg.append("text")
         .attr("transform", "rotate(-90)")
@@ -341,8 +366,9 @@ SpacetimeDiagram.prototype.buildControlUI = function() {
                         st.draw_constructionlines = false;
                     },st.draw_worldlines);
                 new checkbox(100,roy+(rh-cbh)/2,cbh,
-                    function() {console.log("on3");},
-                    function() {console.log("off3");},true);
+                    function() {st.gridline_g.attr("display","inline");},
+                    function() {st.gridline_g.attr("display","none");}
+                    ,false);
                 break;
 
             case 4: // some checkboxes
@@ -366,13 +392,23 @@ SpacetimeDiagram.prototype.buildControlUI = function() {
                     .style('border-radius','20px')
                     .style('left',10+'px')
                     .style('top',10+'px')
+                    .style("width","40%")
                     .style("display","none");
 
                 var table=box_addP.append("table")
+                    .style("width","100%")
+                    .style("font-size","20px");
+
                 var row = table.append("tr");
                 var inputs_addP = [];
                 row.append("th").attr("colspan",2).html("<b>ADD PARTICLE</b>")
                     .style("border-bottom","1pt solid black");
+
+                row = table.append("tr");
+                row.append("th").attr("colspan",2).html("You can press tab to move between fields")
+                    .style("font-style","italic")
+                    .style("font-size","14px")
+                    
                 row = table.append("tr");
                 row.append("td").append("span").html("Name:")
                 inputs_addP.push( row.append("td").append("input").attr("type","text").attr("value",""));
@@ -446,14 +482,24 @@ SpacetimeDiagram.prototype.buildControlUI = function() {
                     .style('border-radius','20px')
                     .style('left',10+'px')
                     .style('top',10+'px')
+                    .style("width","40%")
                     .style("display","none");
 
                 table=box_addE.append("table")
+                    .style("width","100%")
+                    .style("font-size","20px");
+
                 row = table.append("tr");
                 var inputs_addE = [];
                 
-                row.append("th").attr("colspan",2).html("<b>ADD EVENT</b>")
+                row.append("th").attr("colspan",2).html("ADD EVENT")
                     .style("border-bottom","1pt solid black");
+
+                row = table.append("tr");
+                row.append("th").attr("colspan",2).html("You can press tab to move between fields")
+                    .style("font-style","italic")
+                    .style("font-size","14px")
+
                 row = table.append("tr");
                 row.append("td").append("span").html("Name:")
                 inputs_addE.push( row.append("td").append("input").attr("type","text").attr("value",""));
