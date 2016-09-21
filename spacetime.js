@@ -1,14 +1,16 @@
 "use strict"
-var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
+var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_sep) {
     // SVG diagram displaying ct against x
     // div is the html element id (#string) to which the svg is appended
     // xmax(ymax): max value for x(y) domain.
     // There should never be more than one SpacetimeDiagram per div!
 
     if(typeof newtonian === "undefined") newtonian = false;
+    if(typeof gridline_sep !== "number") gridline_sep = 1;
     if(xmin>0 || xmax<0 || ymin>0 || ymax<0){
         throw("Currently, rotations cannot be displayed without a 0,0 origin")
     }
+
     var that = this;
 
     this.div = div+" .st_diag"
@@ -80,7 +82,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
     // set up gridlines (draw first so that they are behind everything)
     this.gridline_g = this.svg.append("g");
 
-    for(var x=this.xmin; x<=this.xmax; x++){
+    for(var x=this.xmin; x<=this.xmax; x+=gridline_sep){
         this.gridline_g.append("line")
             .attr("x1",this.xscale(x))
             .attr("y1",this.yscale(this.ymin))
@@ -90,7 +92,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian) {
             .style("opacity",0.2)
             .style("stroke-width","1px");
     }
-    for(var y=this.ymin; y<=this.ymax; y++){
+    for(var y=this.ymin; y<=this.ymax; y+=gridline_sep){
         this.gridline_g.append("line")
             .attr("x1",this.xscale(this.xmin))
             .attr("y1",this.yscale(y))
@@ -291,6 +293,7 @@ SpacetimeDiagram.prototype.buildControls = function(first_argument) {
         });
 };
 SpacetimeDiagram.prototype.buildPlayUI = function() {
+    // all of these vars are temp
     var oy = this.ctrl.oy; // "origin" of the UI (top left)
     var h = this.ctrl.h; // height of the UI
     var w = this.ctrl.w; // width of the UI
@@ -299,15 +302,37 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
     // group all the UI stuff together
     var g = d3.select(this.div+" svg").append("g");
     var st = this;
-
-    var button = function(x,y,w,h,color,on_click) {
-        g.append("rect")
+    var pad =10;
+    var play_w = 40;
+    var button = function(x,y,w,h,color,on_click,txt) {
+        if(typeof txt === "undefined") txt = "";
+        var that = this;
+        this.group = g.append("g");
+        this.group.append("rect")
             .attr("x",x)
             .attr("y",y)
             .attr("height",h)
             .attr("width",w)
             .style("fill",color)
             .on("click",on_click);
+        this.txt = this.group.append("text").text(txt)
+            .attr("x",x+w/2)
+            .attr("y",y+h/2)
+            .attr("text-anchor","middle")
+            .attr("alignment-baseline","central")
+            .attr("font-size",h+"px")
+            .style("font-family","monospace")
+            .style("pointer-events","none")
+            .style("fill","#000");
+
+        this.group
+            .on("mouseenter",function() {   
+                that.txt.style("fill","#fff");
+            })
+            .on("mouseout",function() {
+                that.txt.style("fill","#000");
+            });
+
         return this;
     };
     var slider = function(x,y,w,h,min,max,initial,vstep,update_func) {
@@ -320,13 +345,14 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
         this.max = max;
         this.vstep = vstep;
         this.value;
-
+        this.group = g.append("g");
         this.v2x = d3.scaleLinear() // converting between values and x-position
             .domain([min,max])
             .range([x,x+w]);
             
         var that = this;
-        g.append("rect")
+
+        this.group.append("rect")
             .attr("x",x)
             .attr("y",y)
             .attr("height",h)
@@ -336,8 +362,7 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
                 that.moveSlider(d3.mouse(this)[0],true);
             });
 
-
-        this.prog_pos = g.append("rect")
+        this.prog_pos = this.group.append("rect")
             .attr("x",this.v2x(0))
             .attr("y",y)
             .attr("height",h)
@@ -345,7 +370,7 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
             .style("fill","green")
             .style("pointer-events","none");
 
-        this.prog_neg = g.append("rect")
+        this.prog_neg = this.group.append("rect")
             .attr("x",this.v2x(min))
             .attr("y",y)
             .attr("height",h)
@@ -353,24 +378,71 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
             .style("fill","red")
             .style("pointer-events","none");
 
-        this.circle = g.append("circle")
+        this.prog_pos_mouse = this.group.append("rect")
+            .attr("x",this.v2x(0))
+            .attr("y",y)
+            .attr("height",h)
+            .attr("width",this.v2x(max)-this.v2x(0))
+            .style("fill","#333")
+            .style("opacity",0.5)
+            .style("pointer-events","none")
+            .attr("display","none");
+
+        this.prog_neg_mouse = this.group.append("rect")
+            .attr("x",this.v2x(min))
+            .attr("y",y)
+            .attr("height",h)
+            .attr("width",this.v2x(0)-this.v2x(min))
+            .style("fill","#333")
+            .style("opacity",0.5)
+            .style("pointer-events","none")
+            .attr("display","none");
+
+        this.group.on("mousemove",function() {
+            var v = that.v2x.invert(d3.mouse(this)[0]);
+            if(v>=0){
+                that.prog_pos_mouse.attr("display","inline");
+                that.prog_neg_mouse.attr("display","none");
+                that.prog_pos_mouse.attr("width",that.v2x(v)-that.v2x(0));
+            }
+            else{
+                that.prog_neg_mouse.attr("display","inline");
+                that.prog_pos_mouse.attr("display","none");
+                that.prog_neg_mouse
+                    .attr("x",that.v2x(v))
+                    .attr("width",that.v2x(0)-that.v2x(v));
+
+            }
+        })
+        .on("mouseout",function() {
+                that.prog_neg_mouse.attr("display","none");
+                that.prog_pos_mouse.attr("display","none");
+        });
+
+        this.circle = this.group.append("circle")
             .attr("r",h/5)
             .attr("cy",y+h/2)
             .style("pointer-events","none").attr("display","none")
             .style("fill","black");
 
+        this.txt = this.group.append("text")
+            .attr("x",x+w/2)
+            .attr("y",y+h/2)
+            .attr("text-anchor","middle")
+            .attr("alignment-baseline","central")
+            .attr("font-size",h+"px")
+            .style("font-family","monospace")
+            .style("pointer-events","none");
+
         this.setValue(initial,false);
     };
     slider.prototype.moveSlider = function(x,update) {
         // update the slider such that cx = x
-        // if update===true then run update function
-        this.value = this.vstep*Math.floor(this.v2x.invert(x)/this.vstep);
-        this.setValue(this.value,update);
+        this.setValue(this.vstep*Math.floor(this.v2x.invert(x)/this.vstep),update);
     };
     slider.prototype.setValue = function(v,update) {
         // update the slider to have a value v
         // if update===true then run update function
-        
         if(v>this.max) v = this.max;
         else if (v<this.min) v = this.min;
 
@@ -385,35 +457,57 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
             this.prog_pos.attr("width",0);
         }
         this.value = v;
+        this.txt.text(v.toFixed(2));
         if(update) this.update(v);
     };
 
-    g.append("rect")
-        .attr("x",0)
-        .attr("y",oy)
-        .attr("width",w)
-        .attr("height",h)
-        .style("fill","black")
+    var bw_gradient = g.append("defs")
+        .append("linearGradient")
+        .attr("id", "bw_gradient")
+        .attr("x1", "0%")
+        .attr("y1", "100%")
+        .attr("x2", "0%")
+        .attr("y2", "0%")
+        .attr("spreadMethod", "pad");
 
-    var play_w = 20;
-    this.play_sld = new slider((play_w+10),oy,w-(play_w+10)*2,rh,st.ymin
+    bw_gradient.append("stop")
+        .attr("offset", "0%")
+        .attr("stop-color", "#aaa")
+        .attr("stop-opacity", 1);
+    bw_gradient.append("stop")
+        .attr("offset", "100%")
+        .attr("stop-color", "#fff")
+        .attr("stop-opacity", 1);
+
+    g.append("rect")
+        .attr("x",5)
+        .attr("y",oy-12.5)
+        .attr("width",w-10)
+        .attr("height",h+10)
+        .style("fill", "url(#bw_gradient)")
+        .style("rx",3)
+        .style("stroke-width","1px")
+        .style("stroke","black");
+
+    this.play_sld = new slider((play_w),oy,w-(play_w)*2,rh,st.ymin
         ,st.ymax,0,st.tstep,
         function(v) {
             st.changeTime(this.value,true);
         });
-    new button(0,oy,play_w,rh,"orange",
+    new button(pad,oy,play_w,rh,"orange",
         function() {
             st.animating = !st.animating;
             st.animate();
-        });
-    new button(w-play_w,oy,play_w,rh/2,"green",
+        },"\u25B6");
+    new button(w-play_w-pad,oy,play_w,rh/2,"green",
         function() {
             st.changeTime(st.t+st.tstep);
-        });
-    new button(w-play_w,oy+rh/2,play_w,rh/2,"red",
+        },"+");
+    new button(w-play_w-pad,oy+rh/2,play_w,rh/2,"red",
         function() {
             st.changeTime(st.t-st.tstep);
-        });
+        },"-");
+
     // prime frame options
     this.prime_sld = new slider(w/4,(oy+rh)+rh/4,w/2,rh/2,-1
         ,1,st.prime_vel,0.01,function(v){
@@ -422,7 +516,17 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
     new button(13*w/16,(oy+rh)+rh/4,w/8,rh/2,"steelblue",
         function() {
             st.transformFrame(st.prime_vel);
-        });
+        },"Transform");
+    g.append("text").text("Prime vel:")
+            .attr("x",w/8)
+            .attr("y",oy+3*rh/2)
+            .attr("text-anchor","middle")
+            .attr("alignment-baseline","central")
+            .attr("font-size",rh/2+"px")
+            .style("font-family","monospace")
+            .style("pointer-events","none")
+            .style("fill","#000");
+
 };
 SpacetimeDiagram.prototype.buildMenus = function() {
     // Create visuals for adding particles
