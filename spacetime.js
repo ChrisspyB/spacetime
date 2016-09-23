@@ -51,8 +51,6 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
         *this.width/this.height; // for dealing with rotations.
     this.particlecount = 0;
     this.colors = ["red","orange","green","blue","cyan"];
-    // 
-    this._mode = "normal" // "normal", "addingBirth","addingDeath"
     // add svg object and translate group to top left margin
     this.svg = d3.select(this.div).append("svg")
         .classed("spacetime",true)
@@ -526,7 +524,6 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
             .style("font-family","monospace")
             .style("pointer-events","none")
             .style("fill","#000");
-
 };
 SpacetimeDiagram.prototype.buildMenus = function() {
     // Create visuals for adding particles
@@ -587,26 +584,59 @@ SpacetimeDiagram.prototype.buildMenus = function() {
 
     row = table.append("tr");
     row.append("td").append("span").html("Lifetime:");
-    inputs_addP.push(row.append("td").append("input").attr("type","number").attr("value",this.ymax)
-        .attr("min",0));
+    var row_lt = row.append("td").append("input").attr("type","number").attr("value",this.ymax)
+        .attr("min",0);
+    inputs_addP.push(row_lt);
 
     row = table.append("tr");
     row.append("td").append("span").html("Always exist:");
-    inputs_addP.push(row.append("td").append("input").attr("type","checkbox").property("checked",false));
+    inputs_addP.push(row.append("td").append("input").attr("type","checkbox").property("checked",false)
+        .on("change",function() {
+            row_lt.property("disabled",d3.select(this).property("checked"));
+        }
+    ));
 
+    row = table.append("tr");
+    row.append("td").append("span").html("Color (Hex RGB):");
+    var row_color_p = row.append("td").append("input").attr("type","text").attr("value","#AAAAAA")
+        .property("disabled","true");
+    inputs_addP.push(row_color_p);
+
+    row = table.append("tr");
+    row.append("td").append("span").html("Auto Color:");
+    inputs_addP.push(row.append("td").append("input").attr("type","checkbox").property("checked",true)
+        .on("change",function() {
+            row_color_p.property("disabled",d3.select(this).property("checked"));
+        }
+    ));
     row = table.append("tr");
     var addP_statustxt = row.append("th").attr("colspan",2);
     row = table.append("tr");
     var th = row.append("th").attr("colspan",2)
     th.append("input").attr("type","button").attr("value"," ADD ")
         .on("click",function() {
+            var color;
             if(Math.abs(parseFloat(inputs_addP[3].property("value")))>1){
-                addP_statustxt.html("Invalid velocity");
+                addP_statustxt.html("FTL velocity");
                 return;
             }
             else if (parseFloat(inputs_addP[4].property("value"))<0){
-                addP_statustxt.html("Invalid lifetime");
+                addP_statustxt.html("Negative lifetime");
                 return;
+            }
+            for (var i=0; i<inputs_addP.length; i++){ // Make sure valid number inputs
+                if (inputs_addP[i].attr("type")==="number" && 
+                    isNaN(parseFloat(inputs_addP[i].property("value")))){
+                    addP_statustxt.html("Invalid Entry");
+                    return;
+                }
+            }            
+            if (!inputs_addP[7].property("checked") && 
+                !/(^#[0-9A-F]{6}$)|(^#[0-9A-F]{3}$)/i.test(inputs_addP[6].property("value"))){
+                addP_statustxt.html("Color must be of format: #xxxxxx where x is 0-9 or A-F");
+                return;
+            }else if (!inputs_addP[7].property("checked")){ // if not autocolor
+                color = inputs_addP[6].property("value"); 
             }
             addP_statustxt.html("");
             that.addParticle(
@@ -614,8 +644,9 @@ SpacetimeDiagram.prototype.buildMenus = function() {
                 parseFloat(inputs_addP[2].property("value")),
                 parseFloat(inputs_addP[3].property("value")),
                 inputs_addP[5].property("checked"),
-                parseFloat(inputs_addP[4].property("value")) ,
-                inputs_addP[0].property("value")
+                parseFloat(inputs_addP[4].property("value")),
+                inputs_addP[0].property("value"),
+                color
             );
             that.ui_addP.style("display","none");
         });
@@ -670,13 +701,47 @@ SpacetimeDiagram.prototype.buildMenus = function() {
     inputs_addE.push(row.append("td").append("input").attr("type","number").attr("value",0));
 
     row = table.append("tr");
+    row.append("td").append("span").html("Color (Hex RGB):");
+    var row_color_e = row.append("td").append("input").attr("type","text").attr("value","#AAAAAA")
+        .property("disabled","true");
+    inputs_addE.push(row_color_e);
+
+    row = table.append("tr");
+    row.append("td").append("span").html("Auto Color:");
+    inputs_addE.push(row.append("td").append("input").attr("type","checkbox").property("checked",true)
+        .on("change",function() {
+            row_color_e.property("disabled",d3.select(this).property("checked"));
+        }
+    ));
+
+    row = table.append("tr");
+    var addE_statustxt = row.append("th").attr("colspan",2);
+
+    row = table.append("tr");
     th = row.append("th").attr("colspan",2)
     th.append("input").attr("type","button").attr("value","ADD")
         .on("click",function() {
+            var color;
+            for (var i=0; i<inputs_addE.length; i++){ // Make sure valid number inputs
+                if (inputs_addE[i].attr("type")==="number" && 
+                    isNaN(parseFloat(inputs_addE[i].property("value")))){
+                    addE_statustxt.html("Invalid Entry");
+                    return;
+                }
+            }
+            if (!inputs_addE[4].property("checked") && 
+                !/(^#[0-9A-F]{6}$)|(^#[0-9A-F]{3}$)/i.test(inputs_addE[3].property("value"))){
+                addE_statustxt.html("Color must be of format: #xxxxxx where x is 0-9 or A-F");
+                return;
+            }
+            else if (!inputs_addE[4].property("checked")){ // if not autocolor
+                color = inputs_addE[3].property("value"); 
+            }
             that.addEvent(
                 parseFloat(inputs_addE[1].property("value")),
                 parseFloat(inputs_addE[2].property("value")),
-                inputs_addE[0].property("value")
+                inputs_addE[0].property("value"),
+                color
             );
             that.ui_addE.style("display","none");
         });
@@ -711,70 +776,6 @@ SpacetimeDiagram.prototype.updatePrimeAxes = function(v) {
     this.prime_vel = v;
     this.prime_sld.setValue(v);
     this.updateConstructionLines();
-};
-SpacetimeDiagram.prototype.setMode = function(newmode) {
-    var that = this;
-    var click;
-    var move;
-    if(newmode==="normal"){
-        this.tempBirth.style("display","none");
-        this.tempDeath.style("display","none");
-        this.tempcone1.style("display","none");
-        this.tempcone2.style("display","none");
-        click = function() {};
-        move = function() {};
-    }
-    else if (newmode==="addingBirth"){
-        this.tempDeath.style("display","none");
-        this.tempcone1.style("display","inline");
-        this.tempcone2.style("display","inline");
-        this.tempBirth.style("display","inline");
-        click = function() {
-            that.setMode("addingDeath");
-        };
-        move = function() {
-            var x = (d3.event.offsetX-that.margin.left)
-            var y = (d3.event.offsetY-that.margin.top)
-            that.tempBirth
-                .attr("cx",x)
-                .attr("cy",y);
-            that.tempcone1
-                .attr("x1",x+10)
-                .attr("y1",y-10)
-                .attr("x2",x+200)
-                .attr("y2",y-200);
-            that.tempcone2
-                .attr("x1",x-10)
-                .attr("y1",y-10)
-                .attr("x2",x-200)
-                .attr("y2",y-200);
-            };
-
-    }
-    else if (newmode==="addingDeath"){
-        this.tempDeath.style("display","inline");
-        click = function() {
-            that.user_AddParticle_Clicks(
-                that.xscale.invert(that.tempBirth.attr("cx")),
-                that.yscale.invert(that.tempBirth.attr("cy")),
-                that.xscale.invert(that.tempDeath.attr("cx")),
-                that.yscale.invert(that.tempDeath.attr("cy")));
-            that.setMode("normal");
-        };
-        move = function() {
-            var x = (d3.event.offsetX-that.margin.left)
-            var y = (d3.event.offsetY-that.margin.top)
-            that.tempDeath
-                .attr("cx",x)
-                .attr("cy",y);
-        };
-    }
-    else{
-        throw("unrecognised mode!");
-    }
-    d3.select(this.div).select("svg").on("click",click);
-    d3.select(this.div).select("svg").on("mousemove",move);
-    this._mode = newmode;
 };
 SpacetimeDiagram.prototype.removeSelected = function(first_argument) {
     if (!this.eventselected || typeof this.selectedIndex!== "number") return;
@@ -855,7 +856,7 @@ SpacetimeDiagram.prototype._updateEvents = function(arr,cleardata) {
             if (d.type==="birth" || d.type==="death"){
                 return "white";
             }
-            return "purple";
+            return d.color?d.color:"purple";
         })
         .style("fill-opacity",function(d) {
              if (d.type==="particle" || d.type==="light") {
@@ -899,7 +900,6 @@ SpacetimeDiagram.prototype._updateEvents = function(arr,cleardata) {
 SpacetimeDiagram.prototype.updateSelection = function(element,i) {
     // element: svg element representing the event
     // i: index of new selection
-    if(this._mode!=="normal") return;
     if(this.eventselected){ // deselect previous
         d3.select(".selected")
             .classed("selected",false);
@@ -957,10 +957,6 @@ SpacetimeDiagram.prototype.updateConstructionLines = function() {
 
     this.construct_g.attr("display","inline");
 };
-SpacetimeDiagram.prototype.user_AddParticle_Clicks = function(xb,tb,xd,td) {
-
-    this.addParticle(xb,tb,(xd-xb)/(td-tb),false,td-tb);
-};
 SpacetimeDiagram.prototype.addParticle = function(xb,tb,u,omni,lt,desc,color) {
     // add a particle that will be born at xb,tb.
     // and travel in x with velocity u with a lifetime lt.
@@ -1007,7 +1003,7 @@ SpacetimeDiagram.prototype.addParticle = function(xb,tb,u,omni,lt,desc,color) {
 SpacetimeDiagram.prototype.addEvent = function(x,t,desc,color) {
     if(typeof desc !== "string") desc = "";
     if(typeof color !== "string") color = "purple";
-    this._updateEvents([[x,t,0,0,desc,color,desc]]
+    this._updateEvents([[x,t,0,0,"event",color,desc]]
         ,false);
 };
 SpacetimeDiagram.prototype.animate = function() {
