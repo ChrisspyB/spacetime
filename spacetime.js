@@ -40,6 +40,9 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
     this.framelength = 100;
     this.draw_worldlines = true;
     this.draw_constructionlines = true;
+    this.draw_particles = true;
+    this.draw_birthdeath = true;
+    this.draw_events = true;
     this.ui_addP;
     this.ui_addE;
     // conventional d3 margin setup
@@ -59,6 +62,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
     .append("g")
         .attr("transform",
         "translate(" + this.margin.left + "," + this.margin.top + ")");
+
 
     this.ctrldiv = d3.select(this.div).append("div").classed("st_controls",true)
         .style("position","relative")
@@ -100,7 +104,6 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
             .style("opacity",0.2)
             .style("stroke-width","1px");
     }
-
     // add x axis
     this.svg.append("g")
         .attr("transform", "translate(0," + this.yscale(0) + ")")
@@ -115,8 +118,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
 
     // add y axis
     this.svg.append("g")
-        .call(d3.axisLeft(this.yscale)
-            .ticks(this.ymin,this.ymax,3))
+        .call(d3.axisLeft(this.yscale))
         .attr("transform","translate("+this.xscale(0)+",0)");
     this.svg.append("text")
         .attr("transform", "rotate(-90)")
@@ -134,6 +136,14 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
     this.axis_yprime=this.svg.append("g")
         .call(d3.axisLeft(this.yscale));
     // ---------------------------------
+
+    this.svg.append("rect") // click on background to deselect. 
+        .attr("x",0-this.margin.left)
+        .attr("y",0-this.margin.top)
+        .attr("width",w)
+        .attr("height",h)
+        .style("opacity","0")
+        .on("click",function() {that.deselect();});
 
     this.active = this.svg.append("g")
 
@@ -204,8 +214,13 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
 
     this.updatePrimeAxes(0);
 };
-SpacetimeDiagram.prototype.buildControls = function(first_argument) {
-    
+SpacetimeDiagram.prototype.deselect = function() {
+    this.eventselected = false;
+    this.construct_g.attr("display","none");
+    this.hovertext.style("opacity",0);
+    this.active_line.attr("display","none");
+};
+SpacetimeDiagram.prototype.buildControls = function() {  
     var that = this;
     var row;
     var td;
@@ -216,15 +231,52 @@ SpacetimeDiagram.prototype.buildControls = function(first_argument) {
     row = table.append("tr");
     row.append("th").attr("colspan",3).html("Controls")
         .style("border-bottom","1pt solid black");
+
+    row = table.append("tr");
+    row.append("th").attr("colspan",3).html("Drawing")
+        .style("border-bottom","1pt solid black");
     
-    row = table.append("tr"); // Checkbox row
+    row = table.append("tr");
     td = row.append("td");
     td.append("input").attr("type","checkbox").property("checked",true)
         .on("change",function() {
             if (d3.select(this).property("checked")){
-                that.draw_worldlines = true;
+                that.draw_particles = true;
             }else{
-                that.draw_worldlines = false;
+                that.draw_particles = false;
+            }
+        }); 
+    td.append("span").html(" Particles");
+
+    td = row.append("td");
+    td.append("input").attr("type","checkbox").property("checked",true)
+        .on("change",function() {
+            if (d3.select(this).property("checked")){
+                that.draw_birthdeath = true;
+            }else{
+                that.draw_birthdeath = false;
+            }
+        });
+    td.append("span").html(" Birth/Death");
+
+    td = row.append("td");
+    td.append("input").attr("type","checkbox").property("checked",true)
+        .on("change",function() {
+            if (d3.select(this).property("checked")){
+                that.draw_events = true;
+            }else{
+                that.draw_events = false;
+            }
+        });
+    td.append("span").html(" Other Events");
+    row = table.append("tr");
+    td = row.append("td");
+    td.append("input").attr("type","checkbox").property("checked",true)
+        .on("change",function() {
+            if (d3.select(this).property("checked")){
+                    that.draw_worldlines = true;
+            }else{
+                    that.draw_worldlines = false;
             }
         }); 
     td.append("span").html(" Draw Worldlines");
@@ -262,6 +314,10 @@ SpacetimeDiagram.prototype.buildControls = function(first_argument) {
             }
         });
     td.append("span").html("Light-line");
+
+    row = table.append("tr");
+    row.append("th").attr("colspan",3).html("Events")
+        .style("border-bottom","1pt solid black");
 
     row = table.append("tr"); // Add/Remove Controls
     td = row.append("td");
@@ -777,20 +833,24 @@ SpacetimeDiagram.prototype.updatePrimeAxes = function(v) {
     this.prime_sld.setValue(v);
     this.updateConstructionLines();
 };
-SpacetimeDiagram.prototype.removeSelected = function(first_argument) {
+SpacetimeDiagram.prototype.removeSelected = function() {
     if (!this.eventselected || typeof this.selectedIndex!== "number") return;
     var data = [];
-    var r = this._data[this.selectedIndex];
+    var ind = this.selectedIndex;
+    var r = this._data[ind];
+
+    if (r.type === "birth") {ind +=2; r = this._data[ind];}
+    else if (r.type === "death"){ind +=1; r = this._data[ind];}    
 
     if (r.type==="particle") this.particlecount--;
 
     for(var i=0; i<this._data.length; i++){
         var d = this._data[i];
         //remove birth event
-        if(i===this.selectedIndex-2 && !r.omni) continue;
+        if(r.type==="particle" && i===ind-2 && !r.omni) continue;
         //remove death event
-        else if(i===this.selectedIndex-1 && !r.omni && r.lt<Infinity) continue;
-        else if(i===this.selectedIndex) continue;
+        else if(r.type==="particle" && i===ind-1 && !r.omni && r.lt<Infinity) continue;
+        else if(i===ind) continue;
         data.push([d.xi,d.yi,d.vx,d.lt,d.type,d.color,d.desc,d.omni]);
     }
     this.eventselected = false;
@@ -831,9 +891,10 @@ SpacetimeDiagram.prototype._updateEvents = function(arr,cleardata) {
     }
     // Following D3 general update pattern
     // Data Join
+
     var events = this.eventsgroup.selectAll("circle").data(this._data);
     var worldlines = this.eventsgroup.selectAll("line").data(this._data_particle);
-    
+
     // Update any existing data
     events
         .attr("cx",function(d,i){return that.xscale(d.x);})
@@ -859,12 +920,21 @@ SpacetimeDiagram.prototype._updateEvents = function(arr,cleardata) {
             return d.color?d.color:"purple";
         })
         .style("fill-opacity",function(d) {
-             if (d.type==="particle" || d.type==="light") {
+            if (d.type==="particle" || d.type==="light") {
                 return d.alive ? 1 : 0;
             }
             if (d.type==="birth" || d.type==="death"){
                 return 0;
             }
+        })
+        .style("display",function(d) {
+            if ((d.type === "particle" || d.type === "light")){
+                return that.draw_particles?"inline":"none";
+            }
+            if ((d.type==="birth" || d.type==="death")){
+                return that.draw_birthdeath?"inline":"none";
+            }
+            return that.draw_events?"inline":"none";
         })
     // Add new data
     events.enter().append("circle")
@@ -876,9 +946,9 @@ SpacetimeDiagram.prototype._updateEvents = function(arr,cleardata) {
         .attr("cx",function(d){return that.xscale(d.x);})
         .attr("cy",function(d){return that.yscale(d.y);})
     worldlines.enter().append("line")
-        .style("stroke",function(d) {return d.color;})
         .style("opacity",0.5);
     worldlines
+        .style("stroke",function(d) {return d.color;})
         .attr("x1",function(d) {
             return d.omni?that.xscale(d.xi+d.vx*(that.ymin-d.yi)):that.xscale(d.xi);
         })
@@ -901,9 +971,6 @@ SpacetimeDiagram.prototype.updateSelection = function(element,i) {
     // element: svg element representing the event
     // i: index of new selection
     if(this.eventselected){ // deselect previous
-        d3.select(".selected")
-            .classed("selected",false);
-        
         if (this.selectedIndex === i) {
             // If clicked twice
             this.eventselected = false;
@@ -915,7 +982,6 @@ SpacetimeDiagram.prototype.updateSelection = function(element,i) {
     }
     this.selectedIndex = i;
     this.eventselected = true;
-    d3.select(element).classed("selected",true);
     this.updateSelectionInfo();
     this.updateConstructionLines();
 };
@@ -1023,9 +1089,7 @@ SpacetimeDiagram.prototype.updateSelectionInfo = function() {
     // called by both updateSelection and changeTime
     var  i = this.selectedIndex;
     if(this._data[i].alive === false){ // deselect the dead
-        this.eventselected = false;
-        this.hovertext.style("opacity",0);
-        this.active_line.attr("display","none");
+        this.deselect();
         return;
     }
     this.active_line
