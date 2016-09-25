@@ -8,5 +8,5 @@ foo.addParticle(0,0,0.25,true,0);
 foo.addParticle(-5,0,0.5,false,20);
 foo.addParticle(0,0,0.75,true,0);
 foo.addParticle(0,0,1,false,20);
-// foo.addEvent(10,15);
+foo.addEvent(10,15);
 foo.changeTime(0);

@@ -10,7 +10,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
     if(xmin>0 || xmax<0 || ymin>0 || ymax<0){
         throw("Currently, rotations cannot be displayed without a 0,0 origin")
     }
-
+    this.control_h = h/10; // *
     var that = this;
 
     this.div = div+" .st_diag"
@@ -46,10 +46,10 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
     this.ui_addP;
     this.ui_addE;
     // conventional d3 margin setup
-    this.margin = {top: 20, right: 20, bottom: 50, left: 50};
-    this.ctrl = {h:h/10,w:w,oy:h-h/10};
+    this.margin = {top: 10, right: 10, bottom: 50, left: 50};
+    this.ctrl = {h:that.control_h,w:w,oy:h};
     this.width = w - this.margin.left - this.margin.right;
-    this.height = h - this.margin.top - this.margin.bottom - this.ctrl.h;
+    this.height = h - this.margin.top - this.margin.bottom;
     this.angle_scale = (this.ymax-this.ymin)/((this.xmax-this.xmin))
         *this.width/this.height; // for dealing with rotations.
     this.particlecount = 0;
@@ -58,11 +58,10 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
     this.svg = d3.select(this.div).append("svg")
         .classed("spacetime",true)
         .attr("width",w)
-        .attr("height",h)
+        .attr("height",h+this.control_h)
     .append("g")
         .attr("transform",
         "translate(" + this.margin.left + "," + this.margin.top + ")");
-
 
     this.ctrldiv = d3.select(this.div).append("div").classed("st_controls",true)
         .style("position","relative")
@@ -145,14 +144,6 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
         .style("opacity","0")
         .on("click",function() {that.deselect();});
 
-    this.active = this.svg.append("g")
-
-    this.active_line = this.active.append("line")
-        .attr("x1",this.xscale(0))
-        .attr("y1",this.yscale(0))
-        .attr("display","none")
-        .style("stroke","black");
-
     this.hovertext = this.svg.append("text");
 
     this.lightline_g = this.svg.append("g");
@@ -218,7 +209,6 @@ SpacetimeDiagram.prototype.deselect = function() {
     this.eventselected = false;
     this.construct_g.attr("display","none");
     this.hovertext.style("opacity",0);
-    this.active_line.attr("display","none");
 };
 SpacetimeDiagram.prototype.buildControls = function() {  
     var that = this;
@@ -245,6 +235,7 @@ SpacetimeDiagram.prototype.buildControls = function() {
             }else{
                 that.draw_particles = false;
             }
+            that._updateEvents();
         }); 
     td.append("span").html(" Particles");
 
@@ -256,6 +247,7 @@ SpacetimeDiagram.prototype.buildControls = function() {
             }else{
                 that.draw_birthdeath = false;
             }
+            that._updateEvents();
         });
     td.append("span").html(" Birth/Death");
 
@@ -267,6 +259,7 @@ SpacetimeDiagram.prototype.buildControls = function() {
             }else{
                 that.draw_events = false;
             }
+            that._updateEvents();
         });
     td.append("span").html(" Other Events");
     row = table.append("tr");
@@ -274,10 +267,11 @@ SpacetimeDiagram.prototype.buildControls = function() {
     td.append("input").attr("type","checkbox").property("checked",true)
         .on("change",function() {
             if (d3.select(this).property("checked")){
-                    that.draw_worldlines = true;
+                that.draw_worldlines = true;
             }else{
-                    that.draw_worldlines = false;
+                that.draw_worldlines = false;
             }
+            that._updateEvents();
         }); 
     td.append("span").html(" Draw Worldlines");
 
@@ -289,6 +283,7 @@ SpacetimeDiagram.prototype.buildControls = function() {
             }else{
                 that.draw_constructionlines = false;
             }
+            that.updateConstructionLines();
         });
     td.append("span").html(" Prime-frame lines");
 
@@ -347,17 +342,17 @@ SpacetimeDiagram.prototype.buildControls = function() {
         });
 };
 SpacetimeDiagram.prototype.buildPlayUI = function() {
-    // all of these vars are temp
-    var oy = this.ctrl.oy; // "origin" of the UI (top left)
-    var h = this.ctrl.h; // height of the UI
-    var w = this.ctrl.w; // width of the UI
-    var n = 2; // number of "rows"
-    var rh = h/n;
+    // all of these vars are temp     this.ctrl = {h:that.control_h,w:w,oy:h};
+
+    var oy = this.height+this.margin.top+this.margin.bottom; // "origin" of the UI (top left)
+    var h = this.control_h; // height of the UI
+    var w = this.width+this.margin.left+this.margin.top; // width of the UI
+    var pad = w/90;
+    var play_w = w/22.5;
     // group all the UI stuff together
-    var g = d3.select(this.div+" svg").append("g");
     var st = this;
-    var pad =10;
-    var play_w = 40;
+
+    var g = d3.select(this.div+" svg").append("g");
     var button = function(x,y,w,h,color,on_click,txt) {
         if(typeof txt === "undefined") txt = "";
         var that = this;
@@ -543,40 +538,40 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
         .style("stroke-width","1px")
         .style("stroke","black");
 
-    this.play_sld = new slider((play_w),oy,w-(play_w)*2,rh,st.ymin
+    this.play_sld = new slider((play_w),oy,w-(play_w)*2,h/2,st.ymin
         ,st.ymax,0,st.tstep,
         function(v) {
             st.changeTime(this.value,true);
         });
-    new button(pad,oy,play_w,rh,"orange",
+    new button(pad,oy,play_w,h/2,"orange",
         function() {
             st.animating = !st.animating;
             st.animate();
         },"\u25B6");
-    new button(w-play_w-pad,oy,play_w,rh/2,"green",
+    new button(w-play_w-pad,oy,play_w,h/4,"green",
         function() {
             st.changeTime(st.t+st.tstep);
         },"+");
-    new button(w-play_w-pad,oy+rh/2,play_w,rh/2,"red",
+    new button(w-play_w-pad,oy+h/4,play_w,h/4,"red",
         function() {
             st.changeTime(st.t-st.tstep);
         },"-");
 
     // prime frame options
-    this.prime_sld = new slider(w/4,(oy+rh)+rh/4,w/2,rh/2,-1
+    this.prime_sld = new slider(w/4,(oy+h/2)+h/8,w/2,h/4,-1
         ,1,st.prime_vel,0.01,function(v){
             st.updatePrimeAxes(v);
         });
-    new button(13*w/16,(oy+rh)+rh/4,w/8,rh/2,"steelblue",
+    new button(13*w/16,(oy+h/2)+h/8,w/8,h/4,"steelblue",
         function() {
             st.transformFrame(st.prime_vel);
         },"Transform");
     g.append("text").text("Prime vel:")
             .attr("x",w/8)
-            .attr("y",oy+3*rh/2)
+            .attr("y",oy+3*h/4)
             .attr("text-anchor","middle")
             .attr("alignment-baseline","central")
-            .attr("font-size",rh/2+"px")
+            .attr("font-size",h/4+"px")
             .style("font-family","monospace")
             .style("pointer-events","none")
             .style("fill","#000");
@@ -854,20 +849,16 @@ SpacetimeDiagram.prototype.removeSelected = function() {
         data.push([d.xi,d.yi,d.vx,d.lt,d.type,d.color,d.desc,d.omni]);
     }
     this.eventselected = false;
-    this._updateEvents(data,true);
+    this._updateData(data,true);
 };
-SpacetimeDiagram.prototype._updateEvents = function(arr,cleardata) {
+SpacetimeDiagram.prototype._updateData = function(arr,cleardata) {
     // ...
     // cleardata: are we overwriting any data?
     if(cleardata !== true) cleardata = false;
     if(cleardata) {
         this._data = [];
         this._data_particle = [];
-    }
-
-    var that = this;
-    var backup = this._data.slice(); // in case invalid args have been use
-    for(var i=0; i<arr.length; i++){
+    }    for(var i=0; i<arr.length; i++){
         if(arr[i][2]>1 && !this.newtonian){
             // * might this be triggered by floating point errors?
             console.log("WARNING: FTL particle created. Speed: "+arr[i][2]);
@@ -889,9 +880,12 @@ SpacetimeDiagram.prototype._updateEvents = function(arr,cleardata) {
             this._data_particle.push(d);
         }
     }
+    this._updateEvents();
+};
+SpacetimeDiagram.prototype._updateEvents = function() {
+    var that = this;
     // Following D3 general update pattern
     // Data Join
-
     var events = this.eventsgroup.selectAll("circle").data(this._data);
     var worldlines = this.eventsgroup.selectAll("line").data(this._data_particle);
 
@@ -975,7 +969,6 @@ SpacetimeDiagram.prototype.updateSelection = function(element,i) {
             // If clicked twice
             this.eventselected = false;
             this.hovertext.style("opacity",0);
-            this.active_line.attr("display","none");
             this.updatePrimeAxes(this._data[i].vx);
             return;
         }
@@ -1064,12 +1057,12 @@ SpacetimeDiagram.prototype.addParticle = function(xb,tb,u,omni,lt,desc,color) {
     new_events.push([ // Particle
         xb,tb,u,lt,ptype,color,desc,omni
     ]);
-    this._updateEvents(new_events,false);
+    this._updateData(new_events,false);
 };
 SpacetimeDiagram.prototype.addEvent = function(x,t,desc,color) {
     if(typeof desc !== "string") desc = "";
     if(typeof color !== "string") color = "purple";
-    this._updateEvents([[x,t,0,0,"event",color,desc]]
+    this._updateData([[x,t,0,0,"event",color,desc]]
         ,false);
 };
 SpacetimeDiagram.prototype.animate = function() {
@@ -1092,11 +1085,6 @@ SpacetimeDiagram.prototype.updateSelectionInfo = function() {
         this.deselect();
         return;
     }
-    this.active_line
-        .attr("x2",this.xscale(this._data[i].x))
-        .attr("y2",this.yscale(this._data[i].y))
-        .attr("display","inline");
-
     this.hovertext.style("opacity",1)
         .attr("x",this.xscale(this._data[i].x)+10)
         .attr("y",this.yscale(this._data[i].y)+30)
@@ -1105,9 +1093,7 @@ SpacetimeDiagram.prototype.updateSelectionInfo = function() {
             " (",this._data[i].x.toFixed(2),
             ",",
             this._data[i].y.toFixed(2),
-            ") s: ",
-            (this._data[i].y*this._data[i].y
-                -this._data[i].x*this._data[i].x).toFixed(2)
+            ")"
             ].join(""));
     this.updateConstructionLines();
 };
@@ -1136,7 +1122,7 @@ SpacetimeDiagram.prototype.changeTime = function(t) {
         }
         d.x = d.xi+d.vx*(t-d.yi);
     }
-    this._updateEvents([],false);
+    this._updateData([],false);
     if(this.eventselected)this.updateSelectionInfo();
     if(t>=this.ymax) this.animating = false;
 };
@@ -1180,7 +1166,7 @@ SpacetimeDiagram.prototype.transformFrame = function(v) {
         }
         this.lab_vel = (this.lab_vel-v)/(1-this.lab_vel*v);
     }
-    this._updateEvents(data,true);
+    this._updateData(data,true);
     this.changeTime(0);
     this.updatePrimeAxes(0); // reset prime axes
 };
