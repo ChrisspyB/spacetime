@@ -35,14 +35,6 @@ body {
     background: darkgrey;
 }
 /*svg*/
-svg{
-    -webkit-user-select: none;  /* Chrome all / Safari all */
-    -moz-user-select: none;     /* Firefox all */
-    -ms-user-select: none;      /* IE 10+ */
-}
-.spacetime{ 
-    background: white;
-}
 .hovertext{
     position: absolute;
     padding: 0 10px;

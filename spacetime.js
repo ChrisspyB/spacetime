@@ -1,5 +1,5 @@
 "use strict"
-var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_sep) {
+var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_sep,nocontrols) {
     // SVG diagram displaying ct against x
     // div is the html element id (#string) to which the svg is appended
     // xmax(ymax): max value for x(y) domain.
@@ -7,6 +7,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
 
     if(typeof newtonian === "undefined") newtonian = false;
     if(typeof gridline_sep !== "number") gridline_sep = 1;
+    if(nocontrols !== true) nocontrols = false;
     if(xmin>0 || xmax<0 || ymin>0 || ymax<0){
         throw("Currently, rotations cannot be displayed without a 0,0 origin")
     }
@@ -45,6 +46,8 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
     this.draw_events = true;
     this.ui_addP;
     this.ui_addE;
+    this.play_sld;
+    this.playgroup;
     // conventional d3 margin setup
     this.margin = {top: 10, right: 10, bottom: 50, left: 50};
     this.ctrl = {h:that.control_h,w:w,oy:h};
@@ -59,6 +62,10 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
         .classed("spacetime",true)
         .attr("width",w)
         .attr("height",h+this.control_h)
+        .style("background",this.newtonian?"#fdd":"white")
+        .style("-webkit-user-select","none")
+        .style("-moz-user-select","none")
+        .style("-ms-user-select","none")
     .append("g")
         .attr("transform",
         "translate(" + this.margin.left + "," + this.margin.top + ")");
@@ -127,14 +134,26 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
         .style("text-anchor", "middle")
         .text("ct");
 
-    // add x' axis
-    this.axis_xprime=this.svg.append("g")
-        .call(d3.axisBottom(this.xscale));
+    if (this.newtonian){
+        // add x' axis
+        this.axis_xprime=this.svg.append("g")
+            .call(d3.axisBottom(this.xscale).ticks(0));
 
-    // add y' axis
-    this.axis_yprime=this.svg.append("g")
-        .call(d3.axisLeft(this.yscale));
-    // ---------------------------------
+        // add y' axis
+        this.axis_yprime=this.svg.append("g")
+            .call(d3.axisLeft(this.yscale).ticks(0));
+
+
+    } else{
+        // add x' axis
+        this.axis_xprime=this.svg.append("g")
+            .call(d3.axisBottom(this.xscale));
+
+        // add y' axis
+        this.axis_yprime=this.svg.append("g")
+            .call(d3.axisLeft(this.yscale));
+        // ---------------------------------
+    }
 
     this.svg.append("rect") // click on background to deselect. 
         .attr("x",0-this.margin.left)
@@ -196,12 +215,13 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
     this.construct_t_mark = this.construct_g.append("circle")
         .style("fill","blue")
         .style("r",3);
-
-    this.play_sld;
-    
     this.buildPlayUI();
     this.buildMenus();
     this.buildControls();
+    if (nocontrols){
+        this.playgroup.style("display","none");
+        this.ctrldiv.style("display","none")
+    }
 
     this.updatePrimeAxes(0);
 };
@@ -353,6 +373,7 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
     var st = this;
 
     var g = d3.select(this.div+" svg").append("g");
+    this.playgroup = g;
     var button = function(x,y,w,h,color,on_click,txt) {
         if(typeof txt === "undefined") txt = "";
         var that = this;
@@ -385,6 +406,7 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
         return this;
     };
     var slider = function(x,y,w,h,min,max,initial,vstep,update_func) {
+        this.mouseisdown = false; // for dragging
         this.update = update_func;
         this.w = w;
         this.h = h;
@@ -400,7 +422,8 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
             .range([x,x+w]);
             
         var that = this;
-
+        this.group.on("mousedown",function(){that.mouseisdown = true;})
+        this.group.on("mouseup",function(){that.mouseisdown = false;})
         this.group.append("rect")
             .attr("x",x)
             .attr("y",y)
@@ -408,6 +431,7 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
             .attr("width",w)
             .style("fill","grey")
             .on("click",function() {
+                that.mouseisdown = false;
                 that.moveSlider(d3.mouse(this)[0],true);
             });
 
@@ -462,10 +486,12 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
                     .attr("width",that.v2x(0)-that.v2x(v));
 
             }
+            if(that.mouseisdown) that.moveSlider(d3.mouse(this)[0],true);
         })
         .on("mouseout",function() {
-                that.prog_neg_mouse.attr("display","none");
-                that.prog_pos_mouse.attr("display","none");
+            that.prog_neg_mouse.attr("display","none");
+            that.prog_pos_mouse.attr("display","none");
+            that.mouseisdown = false;
         });
 
         this.circle = this.group.append("circle")
@@ -807,7 +833,7 @@ SpacetimeDiagram.prototype.updatePrimeAxes = function(v) {
     // rotate the prime axes by arctan(v)
 
     var ary = Math.atan(v*this.angle_scale); // angle (rad) to rotate y-axis
-    var arx = Math.atan(v/this.angle_scale); // angle (rad) to rotate x-axis
+    var arx = this.newtonian?0:Math.atan(v/this.angle_scale); // angle (rad) to rotate x-axis
     var yp = Math.abs(this.yscale(this.ymax)-this.yscale(0)); // length of postive y-axis
     var xm = Math.abs(this.xscale(0)-this.xscale(this.xmin)); // length of negative x-axis
 
@@ -817,6 +843,7 @@ SpacetimeDiagram.prototype.updatePrimeAxes = function(v) {
         ",",this.yscale(0)+xm*Math.sin(arx), // y translation
         ") rotate(",-arx*180/Math.PI, // rotate (deg) 
         ")"].join(""));
+
     this.axis_yprime.attr("transform",["translate(",
             this.xscale(0)+yp*Math.sin(ary), // x translation
             ",",yp*(1-Math.cos(ary)), // y translation
@@ -848,8 +875,9 @@ SpacetimeDiagram.prototype.removeSelected = function() {
         else if(i===ind) continue;
         data.push([d.xi,d.yi,d.vx,d.lt,d.type,d.color,d.desc,d.omni]);
     }
-    this.eventselected = false;
+    this.deselect();
     this._updateData(data,true);
+    this.changeTime(this.t);
 };
 SpacetimeDiagram.prototype._updateData = function(arr,cleardata) {
     // ...
@@ -984,8 +1012,32 @@ SpacetimeDiagram.prototype.updateConstructionLines = function() {
         this.construct_g.attr("display","none");
         return;
     } 
-    //(this.ymax-this.ymin)/((this.xmax-this.xmin))
     var e = this._data[this.selectedIndex];
+
+    if(this.newtonian){ 
+    // x' = x-vt
+    // t' = t
+    console.log(e);
+    this.construct_t
+        .attr("x1",this.xscale(e.x))
+        .attr("y1",this.yscale(e.y))
+        .attr("x2",this.xscale(0))
+        .attr("y2",this.yscale(e.y));
+    this.construct_t_mark
+        .attr("cx",this.xscale(0))
+        .attr("cy",this.yscale(e.y));
+    this.construct_x
+        .attr("x1",this.xscale(e.x))
+        .attr("y1",this.yscale(e.y))
+        .attr("x2",this.xscale(e.x-this.prime_vel*e.y))
+        .attr("y2",this.yscale(0));
+    this.construct_x_mark
+        .attr("cx",this.xscale(e.x-this.prime_vel*e.y))
+        .attr("cy",this.yscale(0));
+
+    this.construct_g.attr("display","inline");
+        return;
+    }
 
     var ary = Math.atan(this.prime_vel*this.angle_scale); // angle (rad) of y-axis rotation
     var arx = Math.atan(this.prime_vel/this.angle_scale); // angle (rad) of x-axis rotation
@@ -1002,14 +1054,14 @@ SpacetimeDiagram.prototype.updateConstructionLines = function() {
         .attr("y1",this.yscale(e.y))
         .attr("x2",this.xscale(0)+ly*Math.sin(ary))
         .attr("y2",this.yscale(0)-ly*Math.cos(ary));
+    this.construct_t_mark
+        .attr("cx",this.xscale(0)+ly*Math.sin(ary))
+        .attr("cy",this.yscale(0)-ly*Math.cos(ary));
     this.construct_x
         .attr("x1",this.xscale(e.x))
         .attr("y1",this.yscale(e.y))
         .attr("x2",this.xscale(0)+lx*Math.cos(arx))
         .attr("y2",this.yscale(0)-lx*Math.sin(arx));
-    this.construct_t_mark
-        .attr("cx",this.xscale(0)+ly*Math.sin(ary))
-        .attr("cy",this.yscale(0)-ly*Math.cos(ary));
     this.construct_x_mark
         .attr("cx",this.xscale(0)+lx*Math.cos(arx))
         .attr("cy",this.yscale(0)-lx*Math.sin(arx));
