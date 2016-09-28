@@ -44,6 +44,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
     this.draw_particles = true;
     this.draw_birthdeath = true;
     this.draw_events = true;
+    this.draw_primegrid = true;
     this.ui_addP;
     this.ui_addE;
     this.play_sld;
@@ -88,28 +89,66 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
         .range([0,this.width]);
 
     // set up gridlines (draw first so that they are behind everything)
-    this.gridline_g = this.svg.append("g");
+    this.gridtick_x = d3.range(xmin,xmax+gridline_sep,gridline_sep);
+    this.gridtick_y = d3.range(ymin,ymax+gridline_sep,gridline_sep);
 
-    for(var x=this.xmin; x<=this.xmax; x+=gridline_sep){
-        this.gridline_g.append("line")
-            .attr("x1",this.xscale(x))
-            .attr("y1",this.yscale(this.ymin))
-            .attr("x2",this.xscale(x))
-            .attr("y2",this.yscale(this.ymax))
-            .style("stroke","blue")
-            .style("opacity",0.2)
-            .style("stroke-width","1px");
-    }
-    for(var y=this.ymin; y<=this.ymax; y+=gridline_sep){
-        this.gridline_g.append("line")
-            .attr("x1",this.xscale(this.xmin))
-            .attr("y1",this.yscale(y))
-            .attr("x2",this.xscale(this.xmax))
-            .attr("y2",this.yscale(y))
-            .style("stroke","blue")
-            .style("opacity",0.2)
-            .style("stroke-width","1px");
-    }
+    this.gridline_x_g = this.svg.append("g");
+        
+    this.gridline_x_g.selectAll("line").data(this.gridtick_x)
+    .enter().append("line")
+        .attr("x1",function(d){return that.xscale(d);})
+        .attr("y1",this.yscale(this.ymin))
+        .attr("x2",function(d){return that.xscale(d);})
+        .attr("y2",this.yscale(this.ymax))
+        .style("stroke","blue")
+        .style("opacity",0.2)
+        .style("stroke-width","1px");
+
+    this.gridline_y_g = this.svg.append("g");
+
+    this.gridline_y_g.selectAll("line").data(this.gridtick_y)
+    .enter().append("line")
+        .attr("x1",this.xscale(this.xmin))
+        .attr("y1",function(d){return that.yscale(d);})
+        .attr("x2",this.xscale(this.xmax))
+        .attr("y2",function(d){return that.yscale(d);})
+        .style("stroke","blue")
+        .style("opacity",0.2)
+        .style("stroke-width","1px");
+
+    // Prime grid built slightly differently to aid rotations later
+
+    this.gridline_prime_x_g = this.svg.append("g");
+
+    this.gridline_prime_x_g.selectAll("line").data(this.gridtick_x)
+    .enter().append("line")
+        .attr("x1",0)
+        .attr("x2",0)
+        .attr("y1",this.yscale(this.ymin))
+        .attr("y2",this.yscale(this.ymax))
+        .attr("transform",function(d){
+            return ["translate(",that.xscale(d),",0) rotate(0)"].join("");
+        })
+        .style("stroke","red")
+        .style("opacity",0.2)
+        .style("stroke-width","1px");
+
+    this.gridline_prime_y_g = this.svg.append("g");
+
+    this.gridline_prime_y_g.selectAll("line").data(this.gridtick_y)
+    .enter().append("line")
+        .attr("x1",this.xscale(this.xmin))
+        .attr("y1",0)
+        .attr("x2",this.xscale(this.xmax))
+        .attr("y2",0)
+        .attr("transform",function(d) {
+            return ["translate(0,",that.yscale(d),") rotate(0)"].join("");
+        })
+        .style("stroke","red")
+        .style("opacity",0.2)
+        .style("stroke-width","1px");
+
+
     // add x axis
     this.svg.append("g")
         .attr("transform", "translate(0," + this.yscale(0) + ")")
@@ -311,9 +350,11 @@ SpacetimeDiagram.prototype.buildControls = function() {
     td.append("input").attr("type","checkbox").property("checked",true)
         .on("change",function() {
             if (d3.select(this).property("checked")){
-                that.gridline_g.attr("display","inline");
+                that.gridline_x_g.attr("display","inline");
+                that.gridline_y_g.attr("display","inline");
             }else{
-                that.gridline_g.attr("display","none");
+                that.gridline_x_g.attr("display","none");
+                that.gridline_y_g.attr("display","none");
             }
         });
     td.append("span").html(" Gridlines");
@@ -329,6 +370,22 @@ SpacetimeDiagram.prototype.buildControls = function() {
             }
         });
     td.append("span").html("Light-line");
+
+    td = row.append("td");
+    td.append("input").attr("type","checkbox").property("checked",true)
+        .on("change",function() {
+            if (d3.select(this).property("checked")){
+                that.gridline_prime_x_g.selectAll("line").style("display","inline");
+                that.gridline_prime_y_g.selectAll("line").style("display","inline");
+                that.draw_primegrid = true;
+                that.updatePrimeAxes(that.prime_vel); // update grid positions
+            }else{
+                that.gridline_prime_x_g.selectAll("line").style("display","none");
+                that.gridline_prime_y_g.selectAll("line").style("display","none");
+                that.draw_primegrid = false;
+            }
+        });
+    td.append("span").html(" Prime Gridlines ");
 
     row = table.append("tr");
     row.append("th").attr("colspan",3).html("Events")
@@ -831,7 +888,7 @@ SpacetimeDiagram.prototype.updatePrimeAxes = function(v) {
     // Handles of rotation of prime axes, relative velocity of new frame
     // If the t and x axes have the same scale (as==1) this will 
     // rotate the prime axes by arctan(v)
-
+    var that = this;
     var ary = Math.atan(v*this.angle_scale); // angle (rad) to rotate y-axis
     var arx = this.newtonian?0:Math.atan(v/this.angle_scale); // angle (rad) to rotate x-axis
     var yp = Math.abs(this.yscale(this.ymax)-this.yscale(0)); // length of postive y-axis
@@ -854,6 +911,28 @@ SpacetimeDiagram.prototype.updatePrimeAxes = function(v) {
     this.prime_vel = v;
     this.prime_sld.setValue(v);
     this.updateConstructionLines();
+
+    if(this.draw_primegrid){
+        this.gridline_prime_x_g.selectAll("line")
+        .attr("transform",function(d) {
+            return ["translate(",
+                that.xscale(d)+yp*Math.sin(ary), // x translation
+                ",",
+                yp*(1-Math.cos(ary)), // y translation
+                ") rotate(",
+                ary*180/Math.PI, // rotate (deg)
+                ")"].join("");
+        })
+
+        this.gridline_prime_y_g.selectAll("line")
+        .attr("transform",function(d){
+            return ["translate(",
+                xm*(1-Math.cos(arx)), // x translation
+                ",",that.yscale(d)+xm*Math.sin(arx), // y translation
+                ") rotate(",-arx*180/Math.PI, // rotate (deg) 
+                ")"].join("");
+        })
+    }
 };
 SpacetimeDiagram.prototype.removeSelected = function() {
     if (!this.eventselected || typeof this.selectedIndex!== "number") return;
