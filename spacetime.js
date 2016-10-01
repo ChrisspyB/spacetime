@@ -1,17 +1,20 @@
 "use strict"
-var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_sep,nocontrols) {
+var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_sep,showcontrols,showplay,showprime) {
     // SVG diagram displaying ct against x
     // div is the html element id (#string) to which the svg is appended
     // xmax(ymax): max value for x(y) domain.
-    // There should never be more than one SpacetimeDiagram per div!
-
+    // *****There should never be more than one SpacetimeDiagram per div!*****
     if(typeof newtonian === "undefined") newtonian = false;
     if(typeof gridline_sep !== "number") gridline_sep = 1;
-    if(nocontrols !== true) nocontrols = false;
+    if(showcontrols !== false) showcontrols = true;
+    if(showplay !== false) showplay = true;
+    if(showprime !== false) showprime = true;
     if(xmin>0 || xmax<0 || ymin>0 || ymax<0){
         throw("Currently, rotations cannot be displayed without a 0,0 origin")
     }
-    this.control_h = h/10; // *
+    this.showplay = showplay;
+    this.showprime = showprime;
+    this.showcontrols = showcontrols;
     var that = this;
 
     this.div = div+" .st_diag"
@@ -48,9 +51,14 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
     this.ui_addP;
     this.ui_addE;
     this.play_sld;
-    this.playgroup;
+    this.ui_bottom;
+    this.control_h = h/10; // height of the play/prime vel. UI
+    this.checkboxes = {};
+
+    if(!showplay && !showprime) this.control_h = 0;
+    else if (!showplay || !showprime) this.control_h = this.control_h/2;
     // conventional d3 margin setup
-    this.margin = {top: 10, right: 10, bottom: 50, left: 50};
+    this.margin = {top: 50, right: 50, bottom: 50, left: 50};
     this.ctrl = {h:that.control_h,w:w,oy:h};
     this.width = w - this.margin.left - this.margin.right;
     this.height = h - this.margin.top - this.margin.bottom;
@@ -63,7 +71,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
         .classed("spacetime",true)
         .attr("width",w)
         .attr("height",h+this.control_h)
-        .style("background",this.newtonian?"#fdd":"white")
+        .style("background",this.newtonian?"#eef":"white")
         .style("-webkit-user-select","none")
         .style("-moz-user-select","none")
         .style("-ms-user-select","none")
@@ -155,10 +163,9 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
         .call(d3.axisBottom(this.xscale))
 
     this.svg.append("text")
-        .attr("transform",
-            "translate(" + (this.width/2) + " ," + 
-                (this.height + this.margin.top + 20) + ")")
-        .style("text-anchor", "middle")
+        .attr("x",this.width+10)
+        .attr("y",this.yscale(0))
+        .attr("alignment-baseline","central")
         .text("x");
 
     // add y axis
@@ -166,11 +173,10 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
         .call(d3.axisLeft(this.yscale))
         .attr("transform","translate("+this.xscale(0)+",0)");
     this.svg.append("text")
-        .attr("transform", "rotate(-90)")
-        .attr("y", 0 - this.margin.left)
-        .attr("x",0 - (this.height / 2))
-        .attr("dy", "1em")
+        .attr("y", -20)
+        .attr("x", this.xscale(0))
         .style("text-anchor", "middle")
+        .attr("alignment-baseline","central")
         .text("ct");
 
     if (this.newtonian){
@@ -257,10 +263,7 @@ var SpacetimeDiagram = function(div,xmin,xmax,ymin,ymax,w,h,newtonian,gridline_s
     this.buildPlayUI();
     this.buildMenus();
     this.buildControls();
-    if (nocontrols){
-        this.playgroup.style("display","none");
-        this.ctrldiv.style("display","none")
-    }
+    
 
     this.updatePrimeAxes(0);
 };
@@ -269,7 +272,8 @@ SpacetimeDiagram.prototype.deselect = function() {
     this.construct_g.attr("display","none");
     this.hovertext.style("opacity",0);
 };
-SpacetimeDiagram.prototype.buildControls = function() {  
+SpacetimeDiagram.prototype.buildControls = function() { 
+    if (!this.showcontrols) this.ctrldiv.style("display","none");
     var that = this;
     var row;
     var td;
@@ -287,103 +291,59 @@ SpacetimeDiagram.prototype.buildControls = function() {
     
     row = table.append("tr");
     td = row.append("td");
-    td.append("input").attr("type","checkbox").property("checked",true)
+    this.checkboxes.showparticles = td.append("input").attr("type","checkbox").property("checked",true)
         .on("change",function() {
-            if (d3.select(this).property("checked")){
-                that.draw_particles = true;
-            }else{
-                that.draw_particles = false;
-            }
-            that._updateEvents();
+            that.cb_showparticles(d3.select(this).property("checked"));
         }); 
     td.append("span").html(" Particles");
 
     td = row.append("td");
-    td.append("input").attr("type","checkbox").property("checked",true)
+    this.checkboxes.showbirthdeath = td.append("input").attr("type","checkbox").property("checked",true)
         .on("change",function() {
-            if (d3.select(this).property("checked")){
-                that.draw_birthdeath = true;
-            }else{
-                that.draw_birthdeath = false;
-            }
-            that._updateEvents();
+            that.cb_showbirthdeath(d3.select(this).property("checked"));
         });
     td.append("span").html(" Birth/Death");
 
     td = row.append("td");
-    td.append("input").attr("type","checkbox").property("checked",true)
+    this.checkboxes.showevents =  td.append("input").attr("type","checkbox").property("checked",true)
         .on("change",function() {
-            if (d3.select(this).property("checked")){
-                that.draw_events = true;
-            }else{
-                that.draw_events = false;
-            }
-            that._updateEvents();
+            that.cb_showevents(d3.select(this).property("checked"));
         });
     td.append("span").html(" Other Events");
     row = table.append("tr");
     td = row.append("td");
-    td.append("input").attr("type","checkbox").property("checked",true)
+    this.checkboxes.showworldlines = td.append("input").attr("type","checkbox").property("checked",true)
         .on("change",function() {
-            if (d3.select(this).property("checked")){
-                that.draw_worldlines = true;
-            }else{
-                that.draw_worldlines = false;
-            }
-            that._updateEvents();
+            that.cb_showworldlines(d3.select(this).property("checked"));
         }); 
     td.append("span").html(" Draw Worldlines");
 
     td = row.append("td");
-    td.append("input").attr("type","checkbox").property("checked",true)
+    this.checkboxes.showprimeprojection =  td.append("input").attr("type","checkbox").property("checked",true)
         .on("change",function() {
-            if (d3.select(this).property("checked")){
-                that.draw_constructionlines = true;
-            }else{
-                that.draw_constructionlines = false;
-            }
-            that.updateConstructionLines();
+            that.cb_showprimeprojection(d3.select(this).property("checked"));
         });
-    td.append("span").html(" Prime-frame lines");
+    td.append("span").html(" Prime-Projection lines");
 
     td = row.append("td");
-    td.append("input").attr("type","checkbox").property("checked",true)
+    this.checkboxes.showgridlines =  td.append("input").attr("type","checkbox").property("checked",true)
         .on("change",function() {
-            if (d3.select(this).property("checked")){
-                that.gridline_x_g.attr("display","inline");
-                that.gridline_y_g.attr("display","inline");
-            }else{
-                that.gridline_x_g.attr("display","none");
-                that.gridline_y_g.attr("display","none");
-            }
+            that.cb_showgridlines(d3.select(this).property("checked"));
         });
     td.append("span").html(" Gridlines");
     
     row = table.append("tr"); // Checkbox row 2
     td = row.append("td");
-    td.append("input").attr("type","checkbox").property("checked",true)
+    this.checkboxes.showlightlines = td.append("input").attr("type","checkbox").property("checked",true)
         .on("change",function() {
-            if (d3.select(this).property("checked")){
-                that.lightline_g.attr("display","inline");
-            }else{
-                that.lightline_g.attr("display","none");
-            }
+            that.cb_showlightlines(d3.select(this).property("checked"));
         });
     td.append("span").html("Light-line");
 
     td = row.append("td");
-    td.append("input").attr("type","checkbox").property("checked",true)
+    this.checkboxes.showprimegrid =  td.append("input").attr("type","checkbox").property("checked",true)
         .on("change",function() {
-            if (d3.select(this).property("checked")){
-                that.gridline_prime_x_g.selectAll("line").style("display","inline");
-                that.gridline_prime_y_g.selectAll("line").style("display","inline");
-                that.draw_primegrid = true;
-                that.updatePrimeAxes(that.prime_vel); // update grid positions
-            }else{
-                that.gridline_prime_x_g.selectAll("line").style("display","none");
-                that.gridline_prime_y_g.selectAll("line").style("display","none");
-                that.draw_primegrid = false;
-            }
+            that.cb_showprimegrid(d3.select(this).property("checked"));
         });
     td.append("span").html(" Prime Gridlines ");
 
@@ -403,7 +363,7 @@ SpacetimeDiagram.prototype.buildControls = function() {
 
         });
     td = row.append("td");
-    td.append("input").attr("type","button").attr("value","Remove Particle/Event")
+    td.append("input").attr("type","button").attr("value","Remove Selected ")
         .on("click",function() {
             that.removeSelected();
         });
@@ -419,19 +379,21 @@ SpacetimeDiagram.prototype.buildControls = function() {
         });
 };
 SpacetimeDiagram.prototype.buildPlayUI = function() {
-    // all of these vars are temp     this.ctrl = {h:that.control_h,w:w,oy:h};
-
     var oy = this.height+this.margin.top+this.margin.bottom; // "origin" of the UI (top left)
     var h = this.control_h; // height of the UI
+    var prime_y  = this.showplay?h/2:0; //offset of the prime group
+    var prime_h  = this.showplay?h/4:h/2;
+    var play_h = this.showprime?0.9*h/2:0.9*h;
     var w = this.width+this.margin.left+this.margin.top; // width of the UI
     var pad = w/90;
     var play_w = w/22.5;
     // group all the UI stuff together
     var st = this;
 
-    var g = d3.select(this.div+" svg").append("g");
-    this.playgroup = g;
-    var button = function(x,y,w,h,color,on_click,txt) {
+    this.ui_bottom = d3.select(this.div+" svg").append("g")
+        .style("display",(!this.showplay && !this.showprime)?"none":"inline");
+
+    var button = function(g,x,y,w,h,color,on_click,txt) {
         if(typeof txt === "undefined") txt = "";
         var that = this;
         this.group = g.append("g");
@@ -462,7 +424,7 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
 
         return this;
     };
-    var slider = function(x,y,w,h,min,max,initial,vstep,update_func) {
+    var slider = function(g,x,y,w,h,min,max,initial,vstep,update_func) {
         this.mouseisdown = false; // for dragging
         this.update = update_func;
         this.w = w;
@@ -593,7 +555,7 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
         if(update) this.update(v);
     };
 
-    var bw_gradient = g.append("defs")
+    var bw_gradient = this.ui_bottom.append("defs")
         .append("linearGradient")
         .attr("id", "bw_gradient")
         .attr("x1", "0%")
@@ -611,50 +573,53 @@ SpacetimeDiagram.prototype.buildPlayUI = function() {
         .attr("stop-color", "#fff")
         .attr("stop-opacity", 1);
 
-    g.append("rect")
-        .attr("x",5)
-        .attr("y",oy-12.5)
-        .attr("width",w-10)
-        .attr("height",h+10)
+    this.ui_bottom.append("rect")
+        .attr("x",0)
+        .attr("y",oy-pad)
+        .attr("width",w)
+        .attr("height",h+pad)
         .style("fill", "url(#bw_gradient)")
         .style("rx",3)
         .style("stroke-width","1px")
         .style("stroke","black");
 
-    this.play_sld = new slider((play_w),oy,w-(play_w)*2,h/2,st.ymin
+    this.playgroup = this.ui_bottom.append("g").style("display",this.showplay?"inline":"none");
+
+    this.play_sld = new slider(this.playgroup,(play_w),oy,w-(play_w)*2,play_h,st.ymin
         ,st.ymax,0,st.tstep,
         function(v) {
             st.changeTime(this.value,true);
         });
-    new button(pad,oy,play_w,h/2,"orange",
+    new button(this.playgroup,pad,oy,play_w,play_h,"orange",
         function() {
-            st.animating = !st.animating;
-            st.animate();
+            st.togglePlay();
         },"\u25B6");
-    new button(w-play_w-pad,oy,play_w,h/4,"green",
+    new button(this.playgroup,w-play_w-pad,oy,play_w,play_h/2,"green",
         function() {
             st.changeTime(st.t+st.tstep);
         },"+");
-    new button(w-play_w-pad,oy+h/4,play_w,h/4,"red",
+    new button(this.playgroup,w-play_w-pad,oy+play_h/2,play_w,play_h/2,"red",
         function() {
             st.changeTime(st.t-st.tstep);
         },"-");
 
     // prime frame options
-    this.prime_sld = new slider(w/4,(oy+h/2)+h/8,w/2,h/4,-1
+    this.primegroup = this.ui_bottom.append("g").style("display",this.showprime?"inline":"none");
+
+    this.prime_sld = new slider(this.primegroup,w/4,(oy+prime_y)+h/8,w/2,prime_h,-1
         ,1,st.prime_vel,0.01,function(v){
             st.updatePrimeAxes(v);
         });
-    new button(13*w/16,(oy+h/2)+h/8,w/8,h/4,"steelblue",
+    new button(this.primegroup,13*w/16,(oy+prime_y)+h/8,w/8,prime_h,"steelblue",
         function() {
             st.transformFrame(st.prime_vel);
         },"Transform");
-    g.append("text").text("Prime vel:")
+    this.primegroup.append("text").text("Prime vel:")
             .attr("x",w/8)
-            .attr("y",oy+3*h/4)
+            .attr("y",oy+h/4+prime_y)
             .attr("text-anchor","middle")
             .attr("alignment-baseline","central")
-            .attr("font-size",h/4+"px")
+            .attr("font-size",prime_h+"px")
             .style("font-family","monospace")
             .style("pointer-events","none")
             .style("fill","#000");
@@ -750,7 +715,7 @@ SpacetimeDiagram.prototype.buildMenus = function() {
     th.append("input").attr("type","button").attr("value"," ADD ")
         .on("click",function() {
             var color;
-            if(Math.abs(parseFloat(inputs_addP[3].property("value")))>1){
+            if(!that.newtonian && Math.abs(parseFloat(inputs_addP[3].property("value")))>1){
                 addP_statustxt.html("FTL velocity");
                 return;
             }
@@ -948,9 +913,9 @@ SpacetimeDiagram.prototype.removeSelected = function() {
     for(var i=0; i<this._data.length; i++){
         var d = this._data[i];
         //remove birth event
-        if(r.type==="particle" && i===ind-2 && !r.omni) continue;
+        if((r.type==="particle" || r.type==="light") && i===ind-2 && !r.omni) continue;
         //remove death event
-        else if(r.type==="particle" && i===ind-1 && !r.omni && r.lt<Infinity) continue;
+        else if((r.type==="particle" || r.type==="light") && i===ind-1 && !r.omni && r.lt<Infinity) continue;
         else if(i===ind) continue;
         data.push([d.xi,d.yi,d.vx,d.lt,d.type,d.color,d.desc,d.omni]);
     }
@@ -1154,8 +1119,8 @@ SpacetimeDiagram.prototype.addParticle = function(xb,tb,u,omni,lt,desc,color) {
     // if lt is set to Infinity, no death event will be added.
     // if omni == false, no birth or death event will be added.
     if (typeof lt === "undefined" || omni === true) lt = Infinity;
-    if (lt<0) {console.log("cannot create particle with negative lifetime!"); return;}
-    if (u>1 || u<-1) {console.log("cannot create faster than light particle!"); return;}
+    if (lt<0) {throw("cannot create particle with negative lifetime!"); return;}
+    if (!this.newtonian && (u>1 || u<-1)) {throw("cannot create faster than light particle!"); return;}
     if (typeof desc !== "string") desc="";
 
     var ptype;
@@ -1305,4 +1270,84 @@ SpacetimeDiagram.prototype.setParticleFrame = function(event_index) {
     // update the frame velocity such that the given particle is at rest.
     if (this._data[event_index].type!=="particle") return;
     this.transformFrame(this._data[event_index].vx);
+};
+SpacetimeDiagram.prototype.togglePlay = function() {
+    this.animating = !this.animating;
+    this.animate();
+};
+SpacetimeDiagram.prototype.cb_showparticles = function(bool) {
+    if (bool){
+        this.draw_particles = true;
+    }else{
+        this.draw_particles = false;
+    }
+    this.checkboxes.showparticles.property("checked",bool);
+    this._updateEvents();
+};
+SpacetimeDiagram.prototype.cb_showbirthdeath = function(bool) {
+    if (bool){
+        this.draw_birthdeath = true;
+    }else{
+        this.draw_birthdeath = false;
+    }
+    this.checkboxes.showbirthdeath.property("checked",bool);
+    this._updateEvents();
+};
+SpacetimeDiagram.prototype.cb_showevents = function(bool) {
+    if (bool){
+        this.draw_events = true;
+    }else{
+        this.draw_events = false;
+    }
+    this.checkboxes.showevents.property("checked",bool);
+    this._updateEvents();
+};
+SpacetimeDiagram.prototype.cb_showworldlines = function(bool) {
+    if (bool){
+        this.draw_worldlines = true;
+    }else{
+        this.draw_worldlines = false;
+    }
+    this.checkboxes.showworldlines.property("checked",bool);
+    this._updateEvents();
+};
+SpacetimeDiagram.prototype.cb_showprimeprojection = function(bool) {
+    if (bool){
+        this.draw_constructionlines = true;
+    }else{
+        this.draw_constructionlines = false;
+    }
+    this.checkboxes.showprimeprojection.property("checked",bool);
+    this.updateConstructionLines();
+};
+SpacetimeDiagram.prototype.cb_showgridlines = function(bool) {
+    if (bool){
+        this.gridline_x_g.attr("display","inline");
+        this.gridline_y_g.attr("display","inline");
+    }else{
+        this.gridline_x_g.attr("display","none");
+        this.gridline_y_g.attr("display","none");
+    }
+    this.checkboxes.showgridlines.property("checked",bool);
+};
+SpacetimeDiagram.prototype.cb_showlightlines = function(bool) {
+    if (bool){
+        this.lightline_g.attr("display","inline");
+    }else{
+        this.lightline_g.attr("display","none");
+    }
+    this.checkboxes.showlightlines.property("checked",bool);
+};
+SpacetimeDiagram.prototype.cb_showprimegrid = function(bool) {
+    if (bool){
+        this.gridline_prime_x_g.selectAll("line").style("display","inline");
+        this.gridline_prime_y_g.selectAll("line").style("display","inline");
+        this.draw_primegrid = true;
+        this.updatePrimeAxes(this.prime_vel); // update grid positions
+    }else{
+        this.gridline_prime_x_g.selectAll("line").style("display","none");
+        this.gridline_prime_y_g.selectAll("line").style("display","none");
+        this.draw_primegrid = false;
+    }
+    this.checkboxes.showprimegrid.property("checked",bool);
 };
