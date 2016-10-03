@@ -50,7 +50,6 @@ var yscale = d3.scaleLinear()
     .domain([0,p_data.length-1])
     .range([h,0]);
 
-
 var circles = svg.selectAll("circle").data(p_data);
 
 circles.enter().append("circle")
@@ -58,7 +57,6 @@ circles.enter().append("circle")
 	.attr("cy",function(d) {return yscale(d.y)})
 	.attr("r",function(d) {return d.m})
 	.attr("fill","red");
-
 
 d3.select("#particles").append("input").attr("type","range")
 	.attr("min",-0.99)
@@ -109,6 +107,43 @@ var run = function() {
 	},frame_length);
 };
 
+// -----
+var table = d3.select("#st2_table");
+var info_cells = [];
+var row = table.append("tr");
+row.append("td")
+	.attr("rowspan","4")
+	.append("div")
+		.attr("id","stdiagram2");
+		
+info_cells.push(row.append("td"));
+info_cells.push(table.append("tr").append("td"));
+info_cells.push(table.append("tr").append("td"));
+info_cells.push(table.append("tr").append("td"));
+
+var tmin = -10;
+var st2 = new SpacetimeDiagram("#stdiagram2",tmin,10,-10,10,width/1,width/1,false,2,false,true,true);
+
+var st2_pdata = [];
+
+st2.old_transformFrame = st2.transformFrame;
+st2.transformFrame = function(v) { 
+	// adjust the transform frame function to update the info table
+	if(Math.abs(v)>=1) return;
+	st2.old_transformFrame(v)
+	if(st2_pdata.length===st2._data_particle.length){
+		for (var i = 0; i < st2_pdata.length; i++) {
+			var p = st2_pdata[i];
+			if (Math.abs(p.v)>=1) continue;
+			p.v = st2._data_particle[i].vx;
+			p.mom = p.m0*p.v/Math.sqrt(1-p.v*p.v);
+			p.E = Math.sqrt(p.mom*p.mom+p.m0*p.m0);
+			p.m = p.m0/Math.sqrt(1-p.v*p.v);
+		};
+	}
+	updateInfo();
+	st2.changeTime(-10);
+};
 var mergeParticles = function(p1,p2) {
 
 	var p1 = Object.assign({}, p1);
@@ -118,58 +153,102 @@ var mergeParticles = function(p1,p2) {
 	p3.mom = p2.mom+p1.mom;
 	p3.E = p2.E+p1.E;
 
-	console.log(p3.mom,p3.E);
 
-	p3.ti = (p1.xi-p2.xi)/(p2.v-p1.v);
-	p3.xi = p1.xi+p1.v*p3.ti;
-	p3.m0 = Math.sqrt(p3.E*p3.E - p3.mom*p3.mom);
+	p3.ti = 0;
+	p3.xi = 0;
+	var b = p3.E*p3.E - p3.mom*p3.mom;
+	p3.m0 = b===0?0:Math.sqrt(b);
 
-	var a = (p3.E*p3.E-p3.m0*p3.m0)/(p3.m0*p3.m0);
-	p3.v = Math.sqrt(a/(a+1)) * (Math.sign(p3.mom));
-
+	if (b===0) p3.v=1;
+	else{
+		var a = (p3.E*p3.E-p3.m0*p3.m0)/(p3.m0*p3.m0);
+		p3.v = Math.sqrt(a/(a+1)) * (Math.sign(p3.mom));
+	}
+	console.log(p3);
 	p3.lt = Infinity
 	return p3;
 };
+var updateInfo = function() {
+	for (var i = 1; i < info_cells.length; i++) {
+		var cell = info_cells[i];
+		var p = st2_pdata[i-1];
+		cell.html([
+			"<b>Particle ", i,
+			"</b><br>Rest mass: ", p.m0.toFixed(2)," eV/c<sup>2</sup>",
+			"</b><br>Rel. mass: ", p.m0===0?"N/A":p.m.toFixed(2),p.m0===0?"":" eV/c<sup>2</sup>",
+			"<br>Velocity: ", p.v.toFixed(2)," c",
+			"<br>Momentum: ", p.mom.toFixed(2)," eV/c",
+			"<br>Energy: ", p.E.toFixed(2)," eV"
 
-var foo = function(e,p) {
-	var m = Math.sqrt(e*e-p*p);
-	var a = (e*e-m*m)/(m*m)
-	var v = Math.sqrt(a/(a+1));
-	console.log("m:"+m+" spd:"+v);
+			].join(""));
+	};
+	//all the system properties are that of the third particle
+	var  p = st2_pdata[2];
+	info_cells[0].html([
+		"<b>System",
+		"</b><br>Invariant mass: ",p.m0.toFixed(2)," eV/c<sup>2</sup>",
+		"<br>Momentum: ",p.mom.toFixed(2)," eV/c",
+		"<br>Energy :",p.E.toFixed(2)," eV"
+		].join(""));
 };
+var buildSim = function(v1,v2) {
+	if(v1[0]<v1[1] || v2[0]<v2[1]) throw("uh oh");
+	st2._updateData([],true);
+	st2_pdata = [];
+	for (var i = 0; i <2; i++) {
+		var v = i==0?v1:v2;
+		var p = {
+			E:v[0],
+			mom:v[1],
+			m0:Math.sqrt(v[0]*v[0]-v[1]*v[1]),
+			lt:-tmin,
+			ti:tmin
+		};
+		if (p.m0!==0){
+			var a = (v[0]*v[0]-p.m0*p.m0)/(p.m0*p.m0);
+			p.v = Math.sqrt(a/(a+1))*Math.sign(v[1]);
+		}
+		else{
+			p.v=1*Math.sign(v[1]);
+		}
+		p.xi = -p.v*p.lt;
+		p.m = p.v/p.m0;
+		st2_pdata.push(p);
+	};
 
-var p1 = {xi:-5,v:0.40,m0:3};
-var p2 = {v:-0.6,m0:90};
+	st2_pdata.push(mergeParticles(st2_pdata[0],st2_pdata[1]));
 
-p1.mom = p1.m0*p1.v/Math.sqrt(1-p1.v*p1.v);
-p1.E = Math.sqrt(p1.mom*p1.mom+p1.m0*p1.m0);
-p2.mom = p2.m0*p2.v/Math.sqrt(1-p2.v*p2.v);
-p2.E = Math.sqrt(p2.mom*p2.mom+p2.m0*p2.m0);
+	for (var i=0; i<st2_pdata.length; i++){
+		var p = st2_pdata[i];
+		st2.addParticle(p.xi,p.ti,p.v,false,p.lt,""+i,Math.abs(p.v)===1?"orange":"red");
+	}
+	st2.transformFrame(0);
+};	
 
-p2.xi = p1.xi*p2.v/p1.v; // to ensure collision at x=0
-p1.lt = (p1.xi-p2.xi)/(p2.v-p1.v);
-p2.lt = p1.lt
+d3.select("#rebuild-sim")
+	.on("click",function() {
+		var v1 = [
+			parseFloat(d3.select("#input-p1-e").property("value")),
+			parseFloat(d3.select("#input-p1-p").property("value"))
+			];
 
-var p3 = mergeParticles(p1,p2);
+		var v2 = [
+			parseFloat(d3.select("#input-p2-e").property("value")),
+			parseFloat(d3.select("#input-p2-p").property("value"))
+			];
+		if (v1[0]<=0||v1[0]<v1[1]){
+			d3.select("#input-p1-e").style("background-color","#faa")
+			d3.select("#input-p1-p").style("background-color","#faa")
+		}else if (v2[0]<=0||v2[0]<v2[1]){
+			d3.select("#input-p2-e").style("background-color","#faa")
+			d3.select("#input-p2-p").style("background-color","#faa")
+		}else{
+			d3.select("#input-p1-e").style("background-color","#ffd")
+			d3.select("#input-p1-p").style("background-color","#ffd")
+			d3.select("#input-p2-e").style("background-color","#ffd")
+			d3.select("#input-p2-p").style("background-color","#ffd")
+			buildSim(v1,v2);
+		}
 
-// offset so that collision occurs at t=0
-
-p1.ti=-p1.lt;
-p2.ti=-p1.lt;
-p3.ti-=p1.lt;
-
-
-var p2_data = [];
-p2_data.push(p1);
-p2_data.push(p2);
-p2_data.push(p3);
-
-var st2 = new SpacetimeDiagram("#stdiagram2",-10,10,-10,10,width/1,width/1,false,2,false,true,true);
-for (var i=0; i<p2_data.length; i++){
-	var p = p2_data[i];
-	st2.addParticle(p.xi,p.ti,p.v,false,p.lt,"","red");
-}
-
-st2.changeTime(-10);
-
+	});
 })();	

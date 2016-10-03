@@ -945,10 +945,11 @@ SpacetimeDiagram.prototype._updateData = function(arr,cleardata) {
             type:arr[i][4], // particle,birth,death,misc,light
             color:arr[i][5],
             desc:arr[i][6],
-            omni:arr[i][7]
+            omni:arr[i][7],
+            index:this._data.length
         }
         this._data.push(d);
-        if(arr[i][4]==="particle" ||arr[i][4]==="light"){
+        if(arr[i][4]==="particle" || arr[i][4]==="light"){
             this._data_particle.push(d);
         }
     }
@@ -956,7 +957,7 @@ SpacetimeDiagram.prototype._updateData = function(arr,cleardata) {
 };
 SpacetimeDiagram.prototype._updateEvents = function() {
     var that = this;
-    // Following D3 general update pattern
+
     // Data Join
     var events = this.eventsgroup.selectAll("circle").data(this._data);
     var worldlines = this.eventsgroup.selectAll("line").data(this._data_particle);
