@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Relativity</title>
+		<link rel="stylesheet" href="style.css" type="text/css"/>
+	</head>
+	<body>
+        <div id="heading">    
+            <div style = "font-size:70px;letter-spacing:15px;height:75px;color:#fff">Relativity</div>
+            <div style = "font-size:27px;color:#666">and spacetime diagrams</div>
+        </div>
+        <div id="content">
+            <div id = "intro">
+            </div>
+            <div id = "spacetime">
+                <h2>Spacetime Diagrams</h2>
+                <h3>Galilean Relativity</h3>
+                As long as events occur at different times, you can find a frame in which they occur at the same position. Additionally, you can make any event that occurs after t = 0 occur at your position (x = 0): with unbounded speed you can reach all non-simulataneous events. <br>
+                Also, if two events occur at the same time, they are the same distance apart in every frame.
+                <div id = "diag1"></div> <br>
+                <h3>Special Relativity</h3>
+                Contrast this with the same situation in special relativity:
+                <ul>
+                    <li>We can make events above the dashed-line (orange and green) occur at x = 0 but not t = 0: our origin and these events have a time-like separation.</li>
+                    <li>We can only make events below the dashed-line (blue and purple) occur at t = 0: our origin and these events have a space-like separation.</li>
+                    <li>Without redefining our origin, events on the dashed-line (t=x) remain on the dashed line. The only way to reach this event from our origin is to travel at the speed of light, so we say we have a light-like separation.</li>
+                    <li>We can make some events occur at the same position (eg red and orange), and some occur at the same time: All events are space/time/light-like separated from each other.</li>
+                </ul>
+                <div id = "diag2"></div>
+            </div>
+            <div id="train">
+                <h2>Train problem</h2>
+                <li>Jim watches a train travelling at XXXc towards a (stationary) tunnel. In his frame both the train and the tunnel are the same length of XXXm.</li>
+                <li>The entrance of the tunnel has a gate which Jim can open and close by pressing a button.</li>
+                <li>Since the train and the tunnel appear the same length, Jim closes the gate as soon as the train begins to exit the tunnel, meaning the gate only just misses the back of the train.</li>
+                <li>In the train's rest frame however, the tunnel is length contracted so the train cannot fit inside the tunnel.</li>
+                <li>The train does not get hit by the gate: the closing of the gate and the train reaching the end of the tunnel are no longer simulataneous.</li>
+                <li>In both frames back of the train enters just before the gate closes.</li>
+
+                <div id = "diag_train_st"></div>
+                <div id = "diag_train_extra"></div>
+                </ul>
+            </div>
+        </div>
+    <script type="text/javascript" src="d3.v4.min.js"></script>
+    <script type="text/javascript" src="spacetime.js"></script>
+    <script type="text/javascript" src="big.js"></script>
+	</body>
+
+</html>
