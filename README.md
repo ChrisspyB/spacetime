@@ -56,6 +56,6 @@ foo.addParticle(xb,tb,v,omni,lt,name,color);
 
 Optional:
 - name (default: ""): name of particle, to be shown on selection.
-- color (default: "#800080"): hexidecimal color code for drawing particle.
+- color (default: auto-choose a color based on number of particles): hexidecimal color code for drawing particle.
 
 More to come...
