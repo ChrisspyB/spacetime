@@ -21,11 +21,14 @@ var foo = new SpacetimeDiagram(#div,xmin,xmax,tmin,tmax,w,h,newtonian,gridline_s
 - #div (string) : # + **id** of div element into which the diagram will be placed e.g. "#my-div-id".
 - xmin : minimum x-value on the axes.
 - xmax : maximum x-value on the axes.
-- tmin : minimum t-value on the axes.
-- tmax : maximum t-value on the axes.
+  - Note: the range [xmin,xmax] MUST include zero. 
+- tmin : minimum ct-value on the axes.
+- tmax : maximum ct-value on the axes.
+  - Note: the range [tmin,tmax] MUST include zero. 
 - w : width of svg (pixels).
 - h : height of svg (pixels).
-
+  - Note: Things tend do look nicer on a square grid, with w == h. In testing I used mostly used w=h=900.
+  
 Optional:
 - newtonian (default: false): if true, diagram will use newtonian relativity instead of special relativity.
 - gridline_sep (default: ): separation of gridlines.
