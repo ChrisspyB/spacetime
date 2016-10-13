@@ -917,7 +917,7 @@ SpacetimeDiagram.prototype.removeSelected = function() {
         //remove death event
         else if((r.type==="particle" || r.type==="light") && i===ind-1 && !r.omni && r.lt<Infinity) continue;
         else if(i===ind) continue;
-        data.push([d.xi,d.yi,d.vx,d.lt,d.type,d.color,d.desc,d.omni]);
+        data.push([d.xi,d.yi,d.vx,d.lt,d.type,d.color,d.name,d.omni]);
     }
     this.deselect();
     this._updateData(data,true);
@@ -944,7 +944,7 @@ SpacetimeDiagram.prototype._updateData = function(arr,cleardata) {
             alive:true, 
             type:arr[i][4], // particle,birth,death,misc,light
             color:arr[i][5],
-            desc:arr[i][6],
+            name:arr[i][6],
             omni:arr[i][7],
             index:this._data.length
         }
@@ -1113,7 +1113,7 @@ SpacetimeDiagram.prototype.updateConstructionLines = function() {
 
     this.construct_g.attr("display","inline");
 };
-SpacetimeDiagram.prototype.addParticle = function(xb,tb,u,omni,lt,desc,color) {
+SpacetimeDiagram.prototype.addParticle = function(xb,tb,u,omni,lt,name,color) {
     // add a particle that will be born at xb,tb.
     // and travel in x with velocity u with a lifetime lt.
     // birth and death events will also be added.
@@ -1122,7 +1122,7 @@ SpacetimeDiagram.prototype.addParticle = function(xb,tb,u,omni,lt,desc,color) {
     if (typeof lt === "undefined" || omni === true) lt = Infinity;
     if (lt<0) {throw("cannot create particle with negative lifetime!"); return;}
     if (!this.newtonian && (u>1 || u<-1)) {throw("cannot create faster than light particle!"); return;}
-    if (typeof desc !== "string") desc="";
+    if (typeof name !== "string") name="";
 
     var ptype;
 
@@ -1152,14 +1152,14 @@ SpacetimeDiagram.prototype.addParticle = function(xb,tb,u,omni,lt,desc,color) {
         ]);
     }
     new_events.push([ // Particle
-        xb,tb,u,lt,ptype,color,desc,omni
+        xb,tb,u,lt,ptype,color,name,omni
     ]);
     this._updateData(new_events,false);
 };
-SpacetimeDiagram.prototype.addEvent = function(x,t,desc,color) {
-    if(typeof desc !== "string") desc = "";
+SpacetimeDiagram.prototype.addEvent = function(x,t,name,color) {
+    if(typeof name !== "string") name = "";
     if(typeof color !== "string") color = "purple";
-    this._updateData([[x,t,0,0,"event",color,desc]]
+    this._updateData([[x,t,0,0,"event",color,name]]
         ,false);
 };
 SpacetimeDiagram.prototype.animate = function() {
@@ -1186,7 +1186,7 @@ SpacetimeDiagram.prototype.updateSelectionInfo = function() {
         .attr("x",this.xscale(this._data[i].x)+10)
         .attr("y",this.yscale(this._data[i].y)+30)
         .text([
-            this._data[i].desc,
+            this._data[i].name,
             " (",this._data[i].x.toFixed(2),
             ",",
             this._data[i].y.toFixed(2),
@@ -1245,7 +1245,7 @@ SpacetimeDiagram.prototype.transformFrame = function(v) {
                 d.xi-v*d.yi, // x' = x-vt
                 d.yi, // t' = t
                 (d.type==="particle"||d.type==="light")?d.vx-v:0, // u' = u-v or 0 for static events
-                d.lt,d.type,d.color,d.desc,d.omni]);
+                d.lt,d.type,d.color,d.name,d.omni]);
         }
         this.lab_vel = this.lab_vel + v;
     }
@@ -1259,7 +1259,7 @@ SpacetimeDiagram.prototype.transformFrame = function(v) {
                 g*(d.yi-v*d.xi), // t' = g(t-vx)
                 (d.type==="particle"||d.type==="light")?(d.vx-v)/(1-d.vx*v):0, // u' = (u-v)/(1-uv) or 0 for static events
                 g*d.lt*(1-(d.vx*v)), // t_death' - t_birth'
-                d.type,d.color,d.desc,d.omni]);
+                d.type,d.color,d.name,d.omni]);
         }
         this.lab_vel = (this.lab_vel-v)/(1-this.lab_vel*v);
     }

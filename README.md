@@ -7,7 +7,7 @@ Suggestions and feedback greatly appreciated.
 
 Near the bottom of your HTML file, somewhere before the `</body>` put the following code:
 ```
-<script type="text/javascript" src="d3.v4.min.js"></script>
+<script type="text/javascript" src="https://d3js.org/d3.v4.min.js"></script>
 <script type="text/javascript" src="https://chrisspyb.github.io/spacetime/spacetime.js"></script>
 ```
 followed by your own scripts, which must appear after this code.
